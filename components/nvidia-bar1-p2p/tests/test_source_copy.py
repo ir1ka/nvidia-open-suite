@@ -11,8 +11,8 @@ class InstalledSourceTests(unittest.TestCase):
   for name in ('version.mk','Makefile','kernel-open/nvidia/nv.c','src/nvidia/src/kernel/gpu/bus/kern_bus.c','src/nvidia/src/kernel/mem_mgr/io_vaspace.c'):
    p=source/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('NVIDIA_VERSION = '+version+'\n'if name=='version.mk'else 'original\n')
   return source
- def test_incomplete_rejected(self):
-  with self.assertRaisesRegex(ValueError,'Incomplete'):m.prepare_local(self.work,self.work/'copy')
+ def test_missing_version_has_actionable_error(self):
+  with self.assertRaisesRegex(ValueError,'missing version.mk'):m.prepare_local(self.work,self.work/'copy')
  def test_unknown_version_rejected_without_output(self):
   source=self.minimal('610.43.03')
   with self.assertRaisesRegex(ValueError,'Unvalidated'):m.prepare_local(source,self.work/'copy')
@@ -25,7 +25,7 @@ class InstalledSourceTests(unittest.TestCase):
   with self.assertRaisesRegex(ValueError,'symlink'):m.prepare_local(source,self.work/'copy')
  def test_patch_failure_never_publishes_or_modifies_original(self):
   source=self.minimal();before=m.manifest(source)
-  with self.assertRaises(subprocess.CalledProcessError),patch.object(m,'run',side_effect=lambda args,**kw:subprocess.run(list(map(str,args)),check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,**kw)):
+  with self.assertRaisesRegex(ValueError,'precompiled RM'),patch.object(m,'run',side_effect=lambda args,**kw:subprocess.run(list(map(str,args)),check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,**kw)):
    m.prepare_local(source,self.work/'copy')
   self.assertEqual(m.manifest(source),before);self.assertFalse((self.work/'copy').exists())
  def test_prepatched_source_is_not_double_patched(self):
@@ -53,3 +53,14 @@ class InstalledSourceTests(unittest.TestCase):
    m.prepare_local(source,self.work/'copy',prepare_hook=fail)
   self.assertEqual(m.manifest(source),before)
   self.assertFalse((self.work/'copy').exists())
+
+ def test_interface_only_tree_reaches_patch_and_fails_actionably(self):
+  source=self.work/'interface';source.mkdir()
+  (source/'version.mk').write_text('NVIDIA_VERSION = '+m.VENDOR['driver_version']+'\n')
+  (source/'nv-kernel.o_binary').write_bytes(b'precompiled RM fixture')
+  patchfile=self.work/'missing-source.patch'
+  patchfile.write_text('--- a/src/missing.c\n+++ b/src/missing.c\n@@ -1 +1 @@\n-old\n+new\n')
+  with self.assertRaisesRegex(ValueError,'precompiled RM'):
+   m.prepare_local(source,self.work/'result',patch_paths=[patchfile])
+  self.assertFalse((self.work/'result').exists())
+  self.assertEqual((source/'nv-kernel.o_binary').read_bytes(),b'precompiled RM fixture')

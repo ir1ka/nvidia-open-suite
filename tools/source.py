@@ -10,7 +10,6 @@ import driver_registry
 META=json.loads((ROOT/'manifest.json').read_text());DRIVER=driver_registry.profile(root=ROOT)['driver_version'];RELEASE=META['suite_version'];VERSION=RELEASE+'+nvidia.'+DRIVER
 spec=importlib.util.spec_from_file_location('bar1_source',BAR1/'tools/source_copy.py')
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
-REQUIRED=json.loads((ROOT/'required-source.json').read_text())
 DKMS_ROOT=Path('/var/lib/dkms')
 LIVE_VERSION=Path('/sys/module/nvidia/version')
 SOURCE_ROOT=Path('/usr/src')
@@ -29,7 +28,6 @@ def tool(name):
 
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def tree_files(path):return {str(p.relative_to(path)):digest(p)for p in sorted(path.rglob('*'))if p.is_file()and p.name!='nvidia-suite-source.json'}
-def complete(path):return all((path/name).is_file()for name in REQUIRED)
 
 def dkms_records(text):
     records=[]
@@ -86,7 +84,7 @@ def fetch_original(archive,work):
     target=work/'official';target.mkdir()
     with tarfile.open(archive)as tar:tar.extractall(target,filter='data')
     original=target/('open-gpu-kernel-modules-'+DRIVER)
-    if not complete(original) or base.source_version(original)!=DRIVER:raise ValueError('Archive must contain complete source for the supported driver version')
+    if base.source_version(original)!=DRIVER:raise ValueError('Archive source version does not match the supported driver version')
     return original
 
 def acquire(plan,work,source=None,archive=None):
@@ -99,7 +97,6 @@ def acquire(plan,work,source=None,archive=None):
     original=source.resolve()
     if any((original/name).exists()for name in ('nvidia-suite-source.json','full-bar1-source.json')):
         raise ValueError('Explicit source is already patched; supply original source or use the official download')
-    if not complete(original):raise ValueError('Explicit source must be a complete NVIDIA open source tree')
     if base.source_version(original)!=DRIVER:raise ValueError('Source/driver version mismatch')
     return original,'explicit-local-source'
 
@@ -114,7 +111,7 @@ def finalize(stage):
 
 def prepare(plan,work,source=None,archive=None):
     require_supported(plan['driver_version'])
-    checks={'dynamic_p2p_sha256':BAR1/'patches/dynamic-bar1-p2p.patch','nvidia_copying_sha256':ROOT/'licenses/NVIDIA-COPYING','integration_sha256':ROOT/'patches/integration.patch','p2p_sha256':BAR1/'patches/full-bar1-p2p.patch','required_source_sha256':ROOT/'required-source.json','suite_build_sha256':ROOT/'packaging/suite-build.sh','dkms_conf_sha256':ROOT/'packaging/dkms.conf','check_modules_sha256':ROOT/'packaging/check-modules.sh'}
+    checks={'dynamic_p2p_sha256':BAR1/'patches/dynamic-bar1-p2p.patch','nvidia_copying_sha256':ROOT/'licenses/NVIDIA-COPYING','integration_sha256':ROOT/'patches/integration.patch','p2p_sha256':BAR1/'patches/full-bar1-p2p.patch','suite_build_sha256':ROOT/'packaging/suite-build.sh','dkms_conf_sha256':ROOT/'packaging/dkms.conf','check_modules_sha256':ROOT/'packaging/check-modules.sh'}
     for key,path in checks.items():
         if digest(path)!=META[key]:raise ValueError('Suite input hash mismatch: '+key)
     original,origin=acquire(plan,work,source,archive)
