@@ -20,59 +20,45 @@
   ],
   "patches": {
     "sec2-postbl-plm-ss-cfg.patch": {
-      "upstream_sha256": "1a9ecd419dc5e732951c8f7093be2a2314233c17e9126297459025a9ff08bc78",
       "sha256": "1a9ecd419dc5e732951c8f7093be2a2314233c17e9126297459025a9ff08bc78"
     },
     "booter-verify.patch": {
-      "upstream_sha256": "047e4acb0f4045c6833dbe75766e3c9c29a76fd3479fab6153275b06aba4fefb",
       "sha256": "047e4acb0f4045c6833dbe75766e3c9c29a76fd3479fab6153275b06aba4fefb"
     },
     "late-pma.patch": {
-      "upstream_sha256": "8e45d523cd2f6a46f84eb476fe778502a96a4040a8e32398dd6e078800caafad",
       "sha256": "8e45d523cd2f6a46f84eb476fe778502a96a4040a8e32398dd6e078800caafad"
     },
     "bar0-pramin-clamp.patch": {
-      "upstream_sha256": "684b7967c1a40ec246d80cd84542272d3648860bf498dbb9cb6fee332c5bb7e5",
       "sha256": "684b7967c1a40ec246d80cd84542272d3648860bf498dbb9cb6fee332c5bb7e5"
     },
     "ce-scrub-workarounds.patch": {
-      "upstream_sha256": "aa25983be0eb7d1358d823e0fd4aa75d6125808ea3676a83bcafdef34c81a137",
       "sha256": "aa25983be0eb7d1358d823e0fd4aa75d6125808ea3676a83bcafdef34c81a137"
     },
     "persistent-sw-state.patch": {
-      "upstream_sha256": "fdd116149b314a107f44ac4895d8a5bdd84b7245a4aef5266660385e9fe2e2a3",
       "sha256": "fdd116149b314a107f44ac4895d8a5bdd84b7245a4aef5266660385e9fe2e2a3"
     },
     "pcie-gen2.patch": {
-      "upstream_sha256": "5b871eed3487b2ce243574b0699cc7bc60604e5faed208023989d1d17a9cd391",
       "sha256": "5b871eed3487b2ce243574b0699cc7bc60604e5faed208023989d1d17a9cd391"
     },
     "pcie-gen2-probe-retrain.patch": {
-      "upstream_sha256": "7d0134591e64658d1a83e52f8cb730f318191b542508bca96547c05ffd50e9c5",
       "sha256": "7d0134591e64658d1a83e52f8cb730f318191b542508bca96547c05ffd50e9c5"
     },
     "name-string.patch": {
-      "upstream_sha256": "2793fd6671cbc104453dc0cbe84fc39b4dc299d21fc254b2eb73348db1d3f881",
       "sha256": "2793fd6671cbc104453dc0cbe84fc39b4dc299d21fc254b2eb73348db1d3f881"
     },
     "bar1-resize-unlock.patch": {
-      "upstream_sha256": "781d4f9f8d150525a8f704c814e526ebb078e6b61301576b517e51e1aee32b3b",
       "sha256": "781d4f9f8d150525a8f704c814e526ebb078e6b61301576b517e51e1aee32b3b"
     },
     "cmp-sku-mask.patch": {
-      "upstream_sha256": "1cd3dfa33883d3029074fe92087d737dda2ae3de1723dfe03ae2944075320490",
       "sha256": "1cd3dfa33883d3029074fe92087d737dda2ae3de1723dfe03ae2944075320490"
     },
     "ecc-enable.patch": {
-      "upstream_sha256": "cb9e1827639d63c6548661136bbf510edfa65bfed61d8daf3c99326cabd058cf",
       "sha256": "cb9e1827639d63c6548661136bbf510edfa65bfed61d8daf3c99326cabd058cf"
     },
     "ecc-fbpa-static.patch": {
-      "upstream_sha256": "7e8c742ce721e5162ac50fd3bbcc2d3f5c4140b1e734f315cfb104894907bd14",
       "sha256": "7e8c742ce721e5162ac50fd3bbcc2d3f5c4140b1e734f315cfb104894907bd14"
     },
     "ecc-reporting.patch": {
-      "upstream_sha256": "d5bee412ecaeffca84b10e9959be5f099a954ea3d38084c692b26518720806a2",
       "sha256": "d5bee412ecaeffca84b10e9959be5f099a954ea3d38084c692b26518720806a2"
     }
   },
@@ -84,7 +70,7 @@
   "p2p_sha256": "9957983fd4385abf53924d117a771a38fb2066bddd6a1de2da1a2163d9a3e922",
   "suite_build_sha256": "3352b228b290c4a193a69dfb02f8a60578e86045e7beedbf54e6898aea81fd81",
   "dkms_conf_sha256": "0281a4a04570eb00fb0db4b53beda6a30564fb301f7090dbaaeca1dcfcfe7fc7",
-  "check_modules_sha256": "cd17652dd6643b58775897d523081b6e3781eb66dc7fd6bca43f484e8cfcf12d",
+  "check_modules_sha256": "71486e7bbc6e67500663e196f7e92885469b0c9a28316351622a775b0956ebd3",
   "pf_architecture": "Independent project; no NVIDIA hook/source/module/package dependency or PF command",
   "boot_architecture": "Standard distribution NVIDIA/DKMS integration; no suite initramfs hook",
   "package_revision": 1,

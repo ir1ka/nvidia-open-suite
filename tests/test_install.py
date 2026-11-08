@@ -11,7 +11,7 @@ class Takeover(unittest.TestCase):
   row=dict(module='nvidia',version='610.43.02',kernel='7.test',arch='x86_64',state='installed')
   self.plan={'provider':dict(row,source=str(self.source)),'nvidia_records':[row]}
   self.status='nvidia/610.43.02, 7.test, x86_64: installed\n'
-  for name,value in [('INSTALL_LOCK',self.root/'lock'),('MODULES_ROOT',modules),('DKMS_ROOT',self.root/'dkms')]:
+  for name,value in [('INSTALL_LOCK',self.root/'lock'),('MODULES_ROOT',modules)]:
    p=patch.object(inst,name,value);p.start();self.addCleanup(p.stop)
   self.root_patch=patch.object(inst.os,'geteuid',return_value=0);self.root_patch.start();self.addCleanup(self.root_patch.stop)
  def test_changed_state_aborts_before_apt_or_backup(self):

@@ -171,6 +171,18 @@ make check-source SOURCE=/path/to/prepared/source
 
 DKMS attempts automatic rebuilds after kernel updates. Missing headers, incompatible interfaces, or untrusted signatures can still prevent use. Secure Boot signing follows the target system's DKMS/key configuration. Packages contain no private signing keys or proprietary NVIDIA user-space/GSP firmware.
 
+### Maintained build and test entry points
+
+- `make check`: unprivileged unit and source-copy checks, including the installed toolkit layout.
+- `make check-source SOURCE=/path/to/prepared/source`: source-level fixtures; no driver loading.
+- `tests/container-dynamic-build.sh`: prepare packages and compile all five modules in a disposable container. Supply `TARGET_KERNEL`, `TARGET_HEADERS`, `SOURCE_ARCHIVE`, `PROVIDE_VERSION`, and `FIRMWARE_PACKAGE`; `DRIVER_VERSION` is optional and otherwise comes from the registry default. Mount the checkout at `/source`, an empty output directory at `/out`, and the target headers/build dependencies. No installation or GPU access is required.
+- `tests/check_debs.py DRIVER.deb TOOLS.deb`: inspect package payloads and maintainer scripts without installing them.
+- `tests/container-apt-provider.sh`: optional APT ownership/replacement regression with synthetic DKMS fixtures; disposable containers only. It is not part of ordinary source checks.
+- `make check-gen2`: Gen2 behavior tests using synthetic PCI paths; disposable root containers only.
+- `tests/hardware/`: explicit GPU tests requiring a separate maintenance window; never run by source/package checks.
+
+Historical container recipes tied to old delivery artifacts and fixed kernel ABIs have been removed. Build timestamps come from the selected registry profile; the Suite module-check version is rendered from Suite metadata. Patch context and test-fixture version literals are intentional, not independent configuration. File-ownership guards, target-ABI checks, and build-snapshot checks remain active.
+
 ## Dependencies and attribution
 
 - Required upstream: [amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker), pinned commit `2c7e2ecd7944e791fec040d2680036beb4a9327b`, GPL v2, in `vendor/cmpunlocker`. Suite uses its preparation script, all 14 patches, constants, and Gen2 behavior, adding prepare-only adaptation in a working copy before Suite patches. Its installer, GRUB modifications, and passthrough deployment are not run. No separate cmpunlocker deb is required. Original LICENSE and CREDITS files are preserved.

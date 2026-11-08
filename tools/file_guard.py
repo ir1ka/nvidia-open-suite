@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Generate a read-only preinst guard against unmanaged payload collisions."""
-import argparse,os,re
+import argparse,re
 from pathlib import Path
 
 def text(stage,allowed,modules=(),replacements=(),installed_modules=()):
@@ -101,7 +101,6 @@ PROJECT_PAYLOAD_PATHS
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--debian',type=Path,required=True);p.add_argument('--dkms-provider',action='append',default=[]);p.add_argument('--module-file',action='append',default=[]);a=p.parse_args();providers=dict(item.split('=',1)for item in a.dkms_provider);module_files=dict(item.split('=',1)for item in a.module_file)
- import subprocess
  control=a.debian/'control'
  for stanza in control.read_text().split('\n\n'):
   fields=dict(line.split(': ',1)for line in stanza.splitlines()if ': 'in line and not line.startswith(' '))

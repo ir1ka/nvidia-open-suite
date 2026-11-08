@@ -14,7 +14,7 @@ def run(args,**kwargs):
 
 def manifest(source):
     return {str(p.relative_to(source)):hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(source.rglob('*'))if p.is_file()and p.name!='full-bar1-source.json'}
+            for p in sorted(source.rglob('*'))if p.is_file()and p.name not in ('full-bar1-source.json','nvidia-suite-source.json')}
 
 def source_version(source):
     try:text=(source/'version.mk').read_text()

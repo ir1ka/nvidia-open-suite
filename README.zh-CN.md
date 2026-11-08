@@ -182,6 +182,18 @@ make check-source SOURCE=/path/to/prepared/source
 
 DKMS 更新内核后自动尝试重编译；缺少 headers、接口不兼容或签名不被信任仍可能失败。Secure Boot 的签名由目标系统 DKMS/密钥配置负责。安装包不包含私钥或专有 NVIDIA 用户态/GSP 固件。
 
+### 维护中的构建与测试入口
+
+- `make check`：非特权单元测试及源码复制检查，包含安装后的工具包布局。
+- `make check-source SOURCE=/path/to/prepared/source`：源码级测试，不加载驱动。
+- `tests/container-dynamic-build.sh`：在临时容器内准备 deb 并编译五个模块。指定 `TARGET_KERNEL`、`TARGET_HEADERS`、`SOURCE_ARCHIVE`、`PROVIDE_VERSION` 和 `FIRMWARE_PACKAGE`；可选的 `DRIVER_VERSION` 默认从版本列表读取。将仓库挂载到 `/source`、空输出目录挂载到 `/out`，并提供目标头文件及构建依赖。不需要安装驱动或访问 GPU。
+- `tests/check_debs.py DRIVER.deb TOOLS.deb`：只读检查包内容及维护脚本，不安装。
+- `tests/container-apt-provider.sh`：使用模拟 DKMS 的可选 APT 归属及替换回归测试，仅限临时容器，不属于普通源码检查。
+- `make check-gen2`：使用模拟 PCI 路径的 Gen2 行为测试，仅限临时 root 容器。
+- `tests/hardware/`：显式 GPU 测试，需要另行安排维护窗口，不由源码或打包检查执行。
+
+已移除依赖历史交付物及固定内核 ABI 的旧容器脚本。构建时间从所选版本配置读取，模块检查中的 Suite 版本从项目元数据生成。补丁上下文和测试数据中的版本文字有实际用途，不是独立配置。文件归属、目标 ABI 和构建快照检查继续保留。
+
 ## 第三方依赖与署名
 
 - 必需上游：[amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker)，固定提交 `2c7e2ecd7944e791fec040d2680036beb4a9327b`，GPL v2，位于 `vendor/cmpunlocker`。使用上游准备脚本、14 项补丁、常量和 Gen2 行为；仅在工作副本加入 prepare-only 适配，再叠加 Suite 补丁。不执行其安装器、GRUB 或 passthrough 部署。不需要另装 cmpunlocker deb。原始 LICENSE 和 CREDITS 保留。

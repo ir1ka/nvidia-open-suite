@@ -115,6 +115,7 @@ class SupportedDrivers(unittest.TestCase):
    stage=Path(tmp);source.finalize(stage)
    self.assertIn('PACKAGE_VERSION="'+source.VERSION+'"',(stage/'dkms.conf').read_text())
    self.assertNotIn('@DRIVER_VERSION@',(stage/'check-modules.sh').read_text())
+   self.assertNotIn('@SUITE_VERSION@',(stage/'check-modules.sh').read_text())
    self.assertIn(source.DRIVER,(stage/'check-modules.sh').read_text())
 
 class CentralDriverMetadata(unittest.TestCase):
@@ -133,11 +134,13 @@ class CentralDriverMetadata(unittest.TestCase):
  def test_template_output_uses_selected_metadata(self):
   with tempfile.TemporaryDirectory() as tmp:
    stage=Path(tmp)
-   with patch.object(source,'DRIVER','999.12.34'),patch.object(source,'VERSION','9.0+nvidia.999.12.34'):
+   with patch.object(source,'DRIVER','999.12.34'),patch.object(source,'VERSION','9.0+nvidia.999.12.34'),patch.object(source,'RELEASE','9.0'):
     source.finalize(stage)
    self.assertIn('PACKAGE_VERSION="9.0+nvidia.999.12.34"',(stage/'dkms.conf').read_text())
    self.assertIn('999.12.34',(stage/'check-modules.sh').read_text())
+   self.assertIn('= 9.0 ]',(stage/'check-modules.sh').read_text())
    self.assertNotIn('@DRIVER_VERSION@',(stage/'check-modules.sh').read_text())
+   self.assertNotIn('@SUITE_VERSION@',(stage/'check-modules.sh').read_text())
 
 class ModifiedArchives(unittest.TestCase):
  def test_modified_archive_is_accepted_without_pristine_checksum(self):

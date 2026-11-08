@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Unified NVIDIA open DKMS patch preparation, installation and diagnostics."""
-import argparse,fcntl,hashlib,importlib.machinery,importlib.util,json,os,re,subprocess,sys
+import argparse,hashlib,importlib.machinery,importlib.util,json,os,subprocess,sys
 from pathlib import Path
 # Unprivileged Debian accounts may omit sbin while preparing/status-reading.
 os.environ['PATH']=os.pathsep.join(dict.fromkeys(os.environ.get('PATH','').split(os.pathsep)+['/usr/sbin','/sbin']))
