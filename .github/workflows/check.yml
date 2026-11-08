@@ -11,6 +11,6 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Install test dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3 build-essential patch kmod pciutils dpkg-dev
+        run: sudo apt-get update && sudo apt-get install -y python3 python3-yaml git build-essential patch kmod pciutils dpkg-dev dkms
       - name: Unprivileged unit tests
         run: make check
