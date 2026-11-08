@@ -108,7 +108,7 @@
   "check_modules_sha256": "54a919e6db0b5b0c7c053756b3c3a8f31886d0675b18bb98470e02d36eb58583",
   "pf_architecture": "Independent project; no NVIDIA hook/source/module/package dependency or PF command",
   "boot_architecture": "Standard distribution NVIDIA/DKMS integration; no suite initramfs hook",
-  "package_revision": 14,
+  "package_revision": 15,
   "nvidia_copying_sha256": "d8e96d29bc323000e7ba56102d77c88226a7a3d0d94e2081cb4b071ae9de4a06",
   "upstream_files": {
     ".github/pull_request_template.md": "e2613c0df53a6bed713299bd30d75597ce19ee99a72bdaf7e60c84771d0ae6c6",
@@ -161,7 +161,7 @@
     "verify.sh": "e66ed9560826f94772eae23f9c3798381758ba96727aabc413272b004e804134"
   },
   "cmp_prepare_only_sha256": "baf76c8f7a6a20477213c4b8272aa4b960ff76061ffd86e5333f548f74f51548",
-  "dynamic_p2p_sha256": "db3c0fac95bee505fe7bddc0d45c9a8b814468f2af7d671e4aabff39039e4383",
+  "dynamic_p2p_sha256": "c2bd0631bdb5b7b9a33c67d4ed1765dbfbecb3e6a08eff2a63a6a726ec8c9adf",
   "dynamic_p2p_reference": {
     "url": "https://github.com/Duanyll/open-gpu-kernel-modules",
     "commit": "8edb5f6c36f39a45cb6df0b8ac19bd42ece80235",

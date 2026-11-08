@@ -72,7 +72,7 @@ def build(source,output,provides_versions=None,firmware_package=None):
         export_toolkit(tools/'usr/share/nvidia-open-suite/toolkit')
         copy(ROOT/'bin/nvidia-open-suite',tools,'usr/sbin/nvidia-open-suite',0o755)
         for stage,name in ((main,NAME),(tools,'nvidia-open-suite-tools')):
-            for f in ('README.md',):copy(ROOT/f,stage,'usr/share/doc/'+name+'/'+f)
+            for f in ('README.md','README.zh-CN.md'):copy(ROOT/f,stage,'usr/share/doc/'+name+'/'+f)
             copy(ROOT/'vendor/cmpunlocker/LICENSE',stage,'usr/share/doc/'+name+'/cmpunlocker-LICENSE')
             copy(ROOT/'vendor/cmpunlocker/CREDITS.md',stage,'usr/share/doc/'+name+'/cmpunlocker-CREDITS.md')
             copy(ROOT/'LICENSE',stage,'usr/share/doc/'+name+'/suite-LICENSE')

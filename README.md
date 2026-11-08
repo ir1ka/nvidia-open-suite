@@ -1,155 +1,159 @@
-# NVIDIA Open Suite 用户手册
+# NVIDIA Open Suite User Manual
 
-基于 NVIDIA open 610.43.02 的 CMP 解锁与 PCIe P2P 集成。分支 `nvidia-610.43.02` 只维护此驱动基线；适配其他 NVIDIA 版本时使用独立 `nvidia-<版本>` 分支。内核 ABI 更新由 DKMS 处理，不等于支持其他 NVIDIA 驱动版本。
+**English** | [Chinese](README.zh-CN.md)
 
-面向 Debian/Ubuntu amd64 和由包管理器/DKMS 管理的 NVIDIA open 驱动；PF BAR Recover、PCI ACS Scope 均不是安装依赖。
+**Distribution validation:** Tested only on Debian 13. Other distributions, including Ubuntu, have not been validated.
 
-## 获取源码
+CMP unlocking and PCIe P2P integration for NVIDIA open driver **610.43.02**. The `nvidia-610.43.02` branch maintains this driver baseline; other NVIDIA versions require separate `nvidia-<version>` branches and adaptation. DKMS rebuilds for kernel updates do not imply compatibility with other NVIDIA driver versions.
+
+For Debian/Ubuntu amd64 systems using a package-managed NVIDIA open DKMS driver. PF BAR Recover and PCI ACS Scope are independent projects and are not dependencies.
+
+## Get the source
 
 ```sh
 git clone --branch nvidia-610.43.02 --recurse-submodules https://github.com/ir1ka/nvidia-open-suite.git
 cd nvidia-open-suite
 ```
 
-已有检出执行 `git submodule update --init --recursive`。普通自动生成的 GitHub ZIP 不含 submodule；完整发行源码归档包含固定上游依赖。
+For an existing checkout, run `git submodule update --init --recursive`. GitHub's automatically generated ZIP archives omit submodules; the complete release source archive includes the pinned dependencies.
 
-## 快速使用
+## Quick start
 
-在本仓库目录执行。先生成 DKMS deb，再由 APT 安装并替换原驱动包；工作目录必须尚不存在。
+Run from this repository. Prepare a DKMS package, then install it through APT to replace the original driver provider. The work directory must not already exist.
 
-```bash
-# 默认读取本机已安装的 open DKMS 驱动版本和发行版包版本
+```sh
+# Detect the installed open DKMS driver and distribution package versions.
 ./bin/nvidia-open-suite prepare --work /var/tmp/nvidia-suite-build-01
 sudo apt install /var/tmp/nvidia-suite-build-01/packages/nvidia-open-suite-dkms_*.deb
 ```
 
-构建机没有 NVIDIA 驱动时，显式指定版本；当前只接受已适配的 610.43.02：
+On a build host without the driver, specify the supported version explicitly:
 
-```bash
+```sh
 ./bin/nvidia-open-suite prepare --driver-version 610.43.02 \
   --provide-version nvidia-kernel-open-dkms=610.43.02-1 \
   --work /var/tmp/nvidia-suite-build-02
 ```
 
-`--firmware-package PACKAGE=VERSION` 指定目标系统的精确 GSP 固件依赖；默认是 Debian 的 `firmware-nvidia-gsp`，非 Debian 目标必须显式指定。
+Replace the example distribution package version with the target system's version. Repeat `--provide-version` for other supported provider package names if necessary. Use `--firmware-package PACKAGE=VERSION` for the target's exact GSP firmware dependency; the default is Debian's `firmware-nvidia-gsp`, and non-Debian targets must specify it explicitly.
 
-`--provide-version` 是目标发行版的原包版本示例，按目标系统替换；可以重复指定不同的已知 NVIDIA 内核包名。离线时加 `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`，已有完整目标源码时加 `--source /path/to/source`。指定版本的 prepare 不读取构建机 NVIDIA/DKMS 注册或包版本；找到的本地源码仍必须匹配该版本，否则使用固定官方归档。
+For offline preparation, add `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`; for an existing complete source tree, use `--source /path/to/source`. Explicit-version preparation does not inspect the build host's installed NVIDIA/DKMS registrations or package versions. Local source must still match the requested version; otherwise preparation uses the pinned official archive.
 
+## Preparation, installation, and kernel updates
 
-## 三个阶段与包替换语义
-
-| 阶段 | 执行内容 | 原 DKMS 注册 |
+| Stage | Action | Original DKMS registration |
 | --- | --- | --- |
-| prepare | 检查/选择版本，复制完整源码、打补丁、校验并生成 deb | 不修改 |
-| apt install | 根据 Provides/Conflicts/Replaces 替换原包；新包注册并编译 Suite DKMS | 原包管理的注册由其卸载脚本清理 |
-| 可选 tools 包 | 提供 prepare/install/status 和测试，不自动配置驱动 | 不因安装工具包而改变 |
+| prepare | Select and validate source, apply patches, validate, and build deb packages | Unchanged |
+| apt install | Replace conflicting provider packages and register/build Suite through DKMS | Removed by the original package's removal scripts |
+| Optional tools package | Provide preparation, installation, status, and test tools | Installing tools alone changes nothing |
 
-**DKMS 在安装成功时已经自动接管，不需要执行 enable 才激活。** 标准 `dh_dkms` 生成的 postinst 调用 DKMS 公共安装流程，注册、选择内核并构建安装五个模块；`AUTOINSTALL=yes` 负责后续内核更新时的自动构建。内核选择、缺少 headers 时的跳过和构建失败处理遵循目标系统 DKMS，安装成功不代替逐内核构建状态检查。
+**The DKMS package activates automatically on installation; no enable command is needed.** Standard `dh_dkms` maintainer scripts use the distribution's DKMS installation process to register, select kernels, and build/install all five modules. `AUTOINSTALL=yes` requests rebuilds after kernel updates. Kernel selection, missing headers, build failures, and signing follow the target system's DKMS behavior; a successful package installation is not proof that every kernel has built successfully.
 
-主包不再提供 enable/disable、boot 或 p2p 子命令，不提供自有 initramfs hook。默认 P2P 开关位于 `/etc/modprobe.d/nvidia-open-suite.conf`，作为 dpkg conffile 管理；升级保留用户修改。当前已加载模块不被主动切换。驱动进入 initramfs 与模块加载遵循发行版现有机制；更改 modprobe 配置后，按需执行 `update-initramfs -u -k all`。
+The main package has no enable/disable, boot, or p2p management commands and no custom initramfs hook. `/etc/modprobe.d/nvidia-open-suite.conf` contains the default P2P policy and is a dpkg conffile, preserving administrator changes on upgrades. Installation does not hot-reload the running driver. Module loading and inclusion in initramfs follow the distribution's existing mechanisms. After configuration changes, update initramfs as appropriate with `sudo update-initramfs -u -k all` and load the new driver during a maintenance window.
 
-`Provides: nvidia-kernel-open-dkms (= 610.43.02-1)` 可以满足依赖该精确版本的元包；仅声明上游 `610.43.02` 不等同于发行版 `610.43.02-1`。`Conflicts` 表示不能与原包共存，`Replaces` 声明包替换关系；APT 负责事务，不由套件启用命令卸载原驱动。
+Versioned `Provides: nvidia-kernel-open-dkms (= 610.43.02-1)` can satisfy exact distribution-version dependencies; upstream version `610.43.02` alone is not equivalent. `Conflicts` prevents simultaneous provider installation, and `Replaces` declares file replacement. APT performs the transaction. These declarations do not remove manually registered DKMS trees. Ownership checks reject unmanaged conflicting files or source trees; administrators must review such installations before migration.
 
-这些声明只作用于包管理，**不会清理手工 dkms add 注册**。安装前归属检查拒绝未受管的同名文件和 DKMS 源码；手工注册或残留需由管理员审阅迁移。可选安装入口同样只处理包管理的提供者：
+An optional installation entry point combines preparation and APT installation:
 
-```bash
+```sh
 sudo ./bin/nvidia-open-suite install --work /var/tmp/nvidia-suite-install-01
 ```
 
-它包含 prepare 和 APT 安装，核验受包管理的原 open DKMS 提供者；只由 APT 移除声明冲突的受管包，不清理手工注册或自行回滚源码。`install --driver-version` 仍不绕过当前主机检查。`--kernel` 仅选择检查哪个已安装原 DKMS ABI，不用于指定 DKMS deb 的运行内核；显式版本 prepare 不接受它。
+It verifies the installed package-managed open DKMS provider and does not remove manual registrations or implement a separate source rollback. `install --driver-version` does not bypass host checks. `--kernel` selects the installed original DKMS ABI to inspect; it does not constrain the generated DKMS package to a runtime kernel and is not accepted by explicit-version preparation.
 
-APT 安装不会由 Suite 热重载 NVIDIA 或重启。磁盘模块与当前已加载模块可以暂时不同，切换在维护窗口安排。原第三方包自身的维护脚本属于其包行为；本机原包的 prerm 执行 dkms remove，主包不额外实现一套接管脚本。
+Suite does not reboot or hot-reload NVIDIA during installation. Original provider maintainer scripts still perform their own package operations. CMP changes take effect during subsequent initialization of matching GPUs. Normal loading is handled by udev/the operating system; Suite does not wrap udev or preload NVIDIA.
 
-CMP 补丁随新模块在匹配设备后续初始化时生效；P2P 默认允许符合资格的设备使用扩展路径。正常加载由 udev/系统负责，套件不提前 modprobe、不包装 udev。
+## Included features
 
-
-## 功能范围
-
-| 功能 | 范围 |
+| Feature | Scope |
 | --- | --- |
-| cmpunlocker | 固定上游 commit 的原样脚本、constants.yaml 与 14 项原样补丁；按 CMP `10de:20c2` / `10de:2082` 选择 64GB/40GB profile，不按当前机器库存固化 |
-| PCIe P2P | 不按 A100 型号限定；公共静态 BAR1 路径两端均开启、BAR1 ≥ 完整 FB 地址空间、静态映射成功、非 MIG/VF，并保留原生 NVLink 优先级 |
+| cmpunlocker | Pinned upstream scripts, constants, and all 14 patches; select 64GB/40GB profiles for CMP `10de:20c2` / `10de:2082`, independently of build-host inventory |
+| Full BAR1 PCIe P2P | Both endpoints opt in, BAR1 covers the complete framebuffer address space, static mapping succeeds, and eligibility checks pass; native NVLink retains priority |
 
-P2P 启用不会伪造硬件兼容性；小 BAR1、MIG/VF 等不合格设备保持受保护。CMP 补丁含固件引导、寄存器与显存几何修改，不修改 GPU Flash。**其中 ECC reporting 会合成/覆盖状态，显示 enabled/scrubComplete 或 infoROM 版本不能证明真实 ECC 正确性或健康状态。**
+P2P configuration does not manufacture hardware compatibility. Unsupported small-BAR devices and VF/MIG configurations remain protected. CMP patches modify firmware boot, registers, and memory geometry, but do not flash GPU firmware. **ECC reporting patches synthesize or override reported state: enabled/scrubComplete or infoROM version output does not establish actual ECC correctness or hardware health.**
 
-prepare 直接执行上游 driver/build.sh 的 prepare-only 工作副本；不执行上游 install.sh。安装默认启用 Gen2 开机 retrain 服务，但不在当前会话启动；不配置 IOMMU、ACS、VFIO、PCI reset、直通或驱动热重载。驱动内 CMP Gen2 retrain 仍属于固定补丁集，会在相应设备初始化时执行。
+Preparation directly runs a prepare-only working copy of upstream `driver/build.sh`, not upstream `install.sh`. The package enables the Gen2 boot retrain service by default but does not start it in the current session. It does not configure GRUB, IOMMU, ACS, VFIO, PCI reset, passthrough, or driver hot-reloading. The upstream in-driver CMP Gen2 retrain patch also remains part of the pinned patch set and runs during applicable device initialization.
 
+## Global and per-device full BAR1 policy
 
-## P2P 全局与逐设备配置
+`RMFullBar1P2P` is the new numeric registry key: `1` permits the added full BAR1 path and `0` disables it. It does not accept a device list. Both endpoints must enable it and pass eligibility checks. Disabling it does not disable NVIDIA's native P2P or NVLink.
 
-`RMFullBar1P2P` 是本补丁新增的数值开关，`1` 允许使用新增 BAR1 P2P 路径，`0` 关闭该路径；不接受设备列表。两端均需开启并通过 BAR1 覆盖完整显存、非 MIG/VF 等检查。关闭此开关不等于关闭 NVIDIA 原生 P2P 或 NVLink。
+`NVreg_RegistryDwords` and `NVreg_RegistryDwordsPerDevice` are existing NVIDIA parameters for global defaults and per-GPU overrides. Use those interfaces directly; Suite does not add a device-list management mechanism.
 
-`NVreg_RegistryDwords` 和 `NVreg_RegistryDwordsPerDevice` 都是 NVIDIA 原有参数，分别用于全局默认值和逐 GPU 覆盖。逐设备选择直接使用原接口，不作为本工具的设备列表功能。
-
-例如，修改主包的 `/etc/modprobe.d/nvidia-open-suite.conf`，全局关闭，仅为两张卡开启：
+For example, edit `/etc/modprobe.d/nvidia-open-suite.conf` to disable globally and enable two devices:
 
 ```conf
 options nvidia NVreg_RegistryDwords="RMFullBar1P2P=0;RmForceEnableGen2=1;RMPcieLinkSpeed=0x1;" NVreg_RegistryDwordsPerDevice="pci=0000:16:00.0;RMFullBar1P2P=1;pci=0000:17:00.0;RMFullBar1P2P=1;RmForceEnableGen2=1;RMPcieLinkSpeed=0x1;"
 ```
 
-或者全局开启，仅为一张卡关闭：
+Or enable globally and disable one device:
 
 ```conf
 options nvidia NVreg_RegistryDwords="RMFullBar1P2P=1;RmForceEnableGen2=1;RMPcieLinkSpeed=0x1;" NVreg_RegistryDwordsPerDevice="pci=0000:16:00.0;RMFullBar1P2P=0;RmForceEnableGen2=1;RMPcieLinkSpeed=0x1;"
 ```
 
-每个 `pci=` 开始一个设备配置段，后续键值对作用于该 GPU，直到下一个 `pci=`；这里使用完整 domain:bus:slot.function 地址。PCI 总线编号变化后须同步修改。配置只在后续模块加载时读取，不改变已加载模块。
+Each `pci=` begins a device section, lasting until the next `pci=`. Use the complete domain:bus:slot.function address and update it if bus numbering changes. Merge existing registry keys before editing; repeated string parameters in multiple files are not merged by their internal keys. Configuration is read on subsequent module loads, not applied to the running driver. Update initramfs as required. Adding these keys to an unpatched NVIDIA driver does not add Suite functionality.
 
-配置前合并已有 NVIDIA registry 键，避免丢失其他参数。不要在多个文件中重复设置同一个字符串参数：它们不会自动按内部键合并。写好后执行 `sudo update-initramfs -u -k all`，在维护窗口下次正常加载驱动时生效；无需重新编译。`RMFullBar1P2P` 需配合本补丁模块，给原版 NVIDIA 驱动添加该键不会获得此功能。
+## Packages
 
+- `nvidia-open-suite-dkms`: complete patched source, DKMS configuration, necessary build/validation scripts, default modprobe conffile, Gen2 service, licenses, and manuals. No preparation commands or test tools.
+- `nvidia-open-suite-tools`: prepare/install/status commands, patches, packaging helpers, and tests. It optionally suggests the main package; installing tools alone does not register DKMS or change P2P policy. A build host does not need the driver package or GSP firmware installed.
 
-## 主包与可选工具包
-
-- `nvidia-open-suite-dkms`：完整已打补丁源码、dkms.conf、必要构建/校验脚本、默认 modprobe conffile、许可证和手册。包含默认 Gen2 服务；没有测试、管理命令或补丁准备工具。
-- `nvidia-open-suite-tools`：prepare/install/status 命令、补丁、准备/打包工具及测试。通过 Suggests 可选关联主包；构建机不需要安装主包或 GSP 固件。安装此包本身不注册 DKMS、不改变 P2P 配置。
-
-```bash
-# 目标主机：只安装驱动主包
+```sh
 sudo apt install ./nvidia-open-suite-dkms_*.deb
-# 可选：安装准备、打包与测试工具
+# Optional preparation and test tools:
 sudo apt install ./nvidia-open-suite-tools_*.deb
 ```
 
-主包使用 debhelper compat 13、`dh_dkms` 与标准 DKMS 公共维护脚本。依赖匹配版本的 firmware-nvidia-gsp 和 g++；dkms 最低版本由 dh_dkms 的 misc:Depends 自动生成，并提供 `nvidia-kernel-610.43.02` 能力名。默认固件包版本取 `--provide-version nvidia-kernel-open-dkms=VERSION`，未指定时为 610.43.02-1；不同仓库的修订号必须按目标发行版指定。不再自行循环所有 headers 目录，具体内核选择、失败和签名行为遵循目标系统 DKMS；归属不明的原提供者拒绝自动接管。
+Packaging uses debhelper compatibility level 13, `dh_dkms`, and standard DKMS maintainer scripts. It depends on matching GSP firmware and g++; `dh_dkms` generates the minimum DKMS dependency. It also provides `nvidia-kernel-610.43.02`. The default firmware package version follows `--provide-version nvidia-kernel-open-dkms=VERSION`, falling back to `610.43.02-1`. Specify distribution-specific revisions explicitly. Kernel selection and signing use the system DKMS implementation.
 
+## Dynamic small BAR1 P2P (optional; RTX 30/40 preview)
 
-## 动态 BAR1 P2P（可选）
-
-full BAR1 路径默认开启，但要求两端完整映射和设备准入条件满足。BAR1 小于显存时，可在已有 NVIDIA modprobe 配置中增加：
+The full BAR1 path is enabled by default but requires complete mappings at both endpoints. When BAR1 is smaller than VRAM, add the following to the existing NVIDIA modprobe configuration to opt into dynamic mappings:
 
 ```conf
 options nvidia NVreg_RMDynamicBar1P2P=1
 ```
 
-动态路径默认关闭，目前准入 Ampere/TU102，保留非兼容设备、VF/MIG、机密计算等保护。它为共享分配建立有限 BAR1 窗口，不是把全部显存同时映射进小 BAR。窗口不足会返回分配失败；应用应释放窗口或减少同时共享的显存。远端原子操作不支持；managed 内存不新增直接 P2P 路径。混合 full/dynamic 和跨型号组合不能保证可用；A100 与 2080 Ti 的 CUDA 跨型号访问当前不可用。RTX 3090 未作本项目实机验证。
+The dynamic path is disabled by default and admits Ampere, Ada, and TU102, retaining guards for incompatible devices, VF/MIG, confidential computing, and other unsupported configurations. It maps shared allocations into a limited BAR1 window rather than mapping all VRAM simultaneously. Exhausting the window returns allocation failure; applications must release mappings or reduce concurrently shared memory. Remote atomics are unsupported, and this feature adds no direct managed-memory P2P path. Mixed full/dynamic and cross-model combinations are not guaranteed; CUDA peer access between A100 and RTX 2080 Ti is currently unavailable.
 
-配置在后续加载模块时读取，不会在线修改已加载驱动。按发行版要求更新 initramfs，并在维护窗口切换模块。原版 NVIDIA 驱动不会因增加这些参数而获得补丁功能。
+### Hardware and validation scope
 
-## 卸载与恢复原包
+| Device | Dynamic small BAR1 P2P status |
+| --- | --- |
+| A100 PCIe 40GB (GA100) | Hardware-tested with a same-model two-card pair and BAR1 temporarily reduced to 256MiB: correctness, bandwidth/latency, window exhaustion, normal/abnormal process-exit cleanup |
+| RTX 2080 Ti (TU102) | Hardware-tested with a same-model two-card pair and 256MiB BAR1; modified 22GB VRAM cards, with NVLink disabled for PCIe testing |
+| GeForce RTX 30 series (GA10x), including RTX 3090 | **Preview**; already admitted by the Ampere gate, with additional static coverage; no hardware validation |
+| GeForce RTX 40 series (AD10x) | **Preview**; Ada admission added; no hardware validation |
+| RTX 4090 48GB (AD102, modified VRAM) | **Expected support, preview only**; no test hardware or hardware validation. The driver must correctly recognize VRAM and all dynamic small BAR1 eligibility checks must pass |
 
-在维护窗口通过 APT 移除 Suite，并安装目标发行版同版本的原 open DKMS 包；确认 headers、用户态和 GSP 版本匹配。不要同时安装两种驱动提供者。Suite 不自动热卸载正在使用的模块、不自动重启。
+A100/RTX 2080 Ti results are from earlier versions. The RTX 30/40 extension received static analysis and compilation checks only, with no new GPU runtime tests. These checks do not establish CUDA/GSP acceptance, performance, or stability on untested cards. Every device remains subject to window budgeting and eligibility checks, including rejection of unsupported static-small-BAR, VF/MIG, confidential-computing, and architecture configurations. Cross-model or cross-architecture interoperability must not be inferred from the table. The existing full BAR1 path and its guards are unchanged.
 
-## 构建与测试
+Changes take effect on a later module load. Update initramfs according to the distribution and schedule the driver transition during a maintenance window. Unpatched drivers do not gain this functionality from configuration alone.
 
-prepare 需要 Python 3、Bash、Git、patch、make、C/C++ 编译器、debhelper、dh-sequence-dkms。DKMS 构建另需目标内核 headers；用户态和 GSP 必须匹配 610.43.02。GPU 测试程序需要 CUDA toolkit；普通 `make check` 不加载驱动或更改设备。
+## Removal and restoring the original provider
+
+During a maintenance window, remove Suite through APT and reinstall the distribution's original open DKMS provider of the matching version. Match kernel headers, user-space libraries, and GSP firmware. Do not install both providers simultaneously. Suite does not automatically unload modules in use or reboot.
+
+## Build and checks
+
+Preparation requires Python 3, Bash, Git, patch, make, C/C++ compilers, debhelper, and dh-sequence-dkms. DKMS compilation also requires target kernel headers. User-space and GSP versions must match 610.43.02. GPU test programs require the CUDA toolkit; ordinary `make check` does not load drivers or change devices.
 
 ```sh
 make check
 make check-source SOURCE=/path/to/prepared/source
 ```
 
-DKMS 更新内核后自动尝试重编译；缺少 headers、接口不兼容或签名不被信任仍可能失败。Secure Boot 的签名由目标系统 DKMS/密钥配置负责。安装包不包含私钥或专有 NVIDIA 用户态/GSP 固件。
+DKMS attempts automatic rebuilds after kernel updates. Missing headers, incompatible interfaces, or untrusted signatures can still prevent use. Secure Boot signing follows the target system's DKMS/key configuration. Packages contain no private signing keys or proprietary NVIDIA user-space/GSP firmware.
 
-## 第三方依赖与署名
+## Dependencies and attribution
 
-- 必需上游：[amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker)，固定提交 `2c7e2ecd7944e791fec040d2680036beb4a9327b`，GPL v2，位于 `vendor/cmpunlocker`。使用上游准备脚本、14 项补丁、常量和 Gen2 行为；仅在工作副本加入 prepare-only 适配，再叠加 Suite 补丁。不执行其安装器、GRUB 或 passthrough 部署。不需要另装 cmpunlocker deb。原始 LICENSE 和 CREDITS 保留。
-- 驱动源码：[NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules)，610.43.02。精确归档 URL/SHA256 在 `components/nvidia-bar1-p2p/vendor.json`；许可证在 `licenses/NVIDIA-COPYING`，保留各文件原始署名。
-- 动态映射参考：[Duanyll/open-gpu-kernel-modules](https://github.com/Duanyll/open-gpu-kernel-modules/tree/8edb5f6c36f39a45cb6df0b8ac19bd42ece80235)，参考 allocation-relative encoder/call-site 方法，窗口管理及守卫由 Suite 重写；不是运行依赖。上游 COPYING 保留 NVIDIA MIT/GPLv2 说明。
+- Required upstream: [amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker), pinned commit `2c7e2ecd7944e791fec040d2680036beb4a9327b`, GPL v2, in `vendor/cmpunlocker`. Suite uses its preparation script, all 14 patches, constants, and Gen2 behavior, adding prepare-only adaptation in a working copy before Suite patches. Its installer, GRUB modifications, and passthrough deployment are not run. No separate cmpunlocker deb is required. Original LICENSE and CREDITS files are preserved.
+- Driver source: [NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules), 610.43.02. The exact archive URL/SHA256 is recorded in `components/nvidia-bar1-p2p/vendor.json`; licensing is preserved in `licenses/NVIDIA-COPYING` and individual source files.
+- Dynamic mapping reference: [Duanyll/open-gpu-kernel-modules](https://github.com/Duanyll/open-gpu-kernel-modules/tree/8edb5f6c36f39a45cb6df0b8ac19bd42ece80235). Suite references its allocation-relative encoder/call-site approach, with rewritten window management and guards; it is not a runtime dependency. Upstream COPYING retains NVIDIA's MIT/GPLv2 terms.
 
-本项目并非 NVIDIA 或 cmpunlocker 官方发行。Suite 自有集成代码采用 GPL v2；上游代码保留其原始许可证。上游依赖自身附带的文件保留原样，供校验和重现，不代表本项目的开发历史。
+This is not an official NVIDIA or cmpunlocker distribution. Suite integration code is GPL v2; upstream files retain their original licenses and attribution. Bundled upstream material is retained for verification and reproducibility, not as this project's development history.
 
-## 交流与维护
+## Contact and maintenance
 
-维护者：IriKa Qiu（[ir1ka](https://github.com/ir1ka)）。通过 [Issues](https://github.com/ir1ka/nvidia-open-suite/issues) 报告问题与讨论，通过 [Pull Requests](https://github.com/ir1ka/nvidia-open-suite/pulls) 提交改进。安全问题请先请求私密渠道，不要在公开 issue 中附上漏洞细节或密钥。
-
-本项目采用 GPL v2；保留所有第三方原始许可证和署名。
+Maintainer: IriKa Qiu ([ir1ka](https://github.com/ir1ka)). Use [Issues](https://github.com/ir1ka/nvidia-open-suite/issues) for reports and discussion, and [Pull Requests](https://github.com/ir1ka/nvidia-open-suite/pulls) for improvements. Request a private channel before sharing security-sensitive details; do not post exploit details or keys in public issues.
