@@ -46,10 +46,11 @@ On a build host without the driver, specify the supported version explicitly:
 ```sh
 ./bin/nvidia-open-suite prepare --driver-version 610.43.02 \
   --provide-version nvidia-kernel-open-dkms=610.43.02-1 \
+  --firmware-package firmware-nvidia-gsp=610.43.02-1 \
   --work /var/tmp/nvidia-suite-build-02
 ```
 
-Replace the example distribution package version with the target system's version. Repeat `--provide-version` for other supported provider package names if necessary. Use `--firmware-package PACKAGE=VERSION` for the target's exact GSP firmware dependency; the default is Debian's `firmware-nvidia-gsp`, and non-Debian targets must specify it explicitly.
+Use each target package's full version, including its epoch and distribution revision. Default local preparation reads installed `nvidia-kernel-open-dkms` and `firmware-nvidia-gsp` independently with `dpkg-query`; their versions need not be equal. An explicit override takes precedence. With `--driver-version` (cross-system preparation), both `--provide-version nvidia-kernel-open-dkms=VERSION` and `--firmware-package PACKAGE=VERSION` are required; build-host package metadata is not used. Missing original-package metadata (including after Suite has replaced it) requires an explicit override, rather than guessing a version.
 
 ### Driver source acquisition
 
@@ -130,7 +131,7 @@ sudo apt install ./nvidia-open-suite-dkms_*.deb
 sudo apt install ./nvidia-open-suite-tools_*.deb
 ```
 
-Packaging uses debhelper compatibility level 13, `dh_dkms`, and standard DKMS maintainer scripts. It depends on matching GSP firmware and g++; `dh_dkms` generates the minimum DKMS dependency. It also provides `nvidia-kernel-610.43.02`. The default firmware package version follows `--provide-version nvidia-kernel-open-dkms=VERSION`, falling back to `610.43.02-1`. Specify distribution-specific revisions explicitly. Kernel selection and signing use the system DKMS implementation.
+Packaging uses debhelper compatibility level 13, `dh_dkms`, and standard DKMS maintainer scripts. GSP firmware has its own exact version dependency; it is never inferred from the DKMS version. The only `Provides` is the versioned `nvidia-kernel-open-dkms` replacement; unsupported distribution aliases and the unused `nvidia-kernel-VERSION` capability are not advertised. `Replaces` names only `nvidia-kernel-open-dkms`. `Conflicts` additionally blocks proprietary/alternative NVIDIA DKMS providers and legacy BAR1 P2P packages because they install the same kernel module names; it does not claim to provide or replace those packages. The tools package retains versioned `Breaks`/`Replaces` for files moved out of older Suite main packages. Kernel selection and signing use system DKMS.
 
 ## Dynamic small BAR1 P2P (optional; RTX 30/40 preview)
 

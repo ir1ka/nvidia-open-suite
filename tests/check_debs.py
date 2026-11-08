@@ -28,7 +28,8 @@ from source import VERSION
 assert subprocess.check_output(['dpkg-deb','-f',str(main),'Version'],text=True).strip().startswith('1:'+VERSION+'.')
 control=subprocess.check_output(['dpkg-deb','-f',str(main)],text=True)
 assert 'dkms (>='in control and 'firmware-nvidia-gsp (= 610.43.02-1)'in control
-assert 'nvidia-kernel-610.43.02'in control
+assert '\nProvides: nvidia-kernel-open-dkms (= 610.43.02-1)\n'in control
+assert '\nReplaces: nvidia-kernel-open-dkms\n'in control
 deps=next(l for l in control.splitlines()if l.startswith('Depends:'))
 assert 'liblzma5'not in deps and 'libzstd1'not in deps and 'findutils'not in deps
 with archive(tools,'--fsys-tarfile')as t:

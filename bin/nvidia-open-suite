@@ -20,9 +20,8 @@ def p2p_app():
 
 def make_package(a,install=False):
     import source,package
-    from install import packages
     plan=source.build_plan(a.driver_version,a.kernel,require_installed=install)
-    versions=package.provide_versions(a.provide_version,packages()if plan['mode']=='installed-driver'else{})
+    versions,firmware=package.target_metadata(a.provide_version,getattr(a,'firmware_package',None),detect=plan['mode']=='installed-driver')
     work=a.work.resolve()
     if work==Path('/')or any(work==Path(x)or Path(x)in work.parents for x in ('/etc','/usr','/lib','/boot','/sys','/proc','/dev','/var/lib/dkms')):raise ValueError('Use a separate non-system work directory')
     provider_source=Path(plan['provider']['source']).resolve()
@@ -31,7 +30,7 @@ def make_package(a,install=False):
     work.mkdir(parents=True,mode=0o700,exist_ok=False)
     (work/'detected-install.json').write_text(json.dumps(plan,indent=2)+'\n')
     prepared=source.prepare(plan,work,a.source,a.archive)
-    deb=package.build(prepared,work/'packages',versions,**({'firmware_package':a.firmware_package}if getattr(a,'firmware_package',None)else{}))
+    deb=package.build(prepared,work/'packages',versions,firmware_package=firmware)
     result=dict(plan=plan,prepared_source=str(prepared),package=str(deb),sha256=hashlib.sha256(deb.read_bytes()).hexdigest(),packages=[str(p)for p in sorted(deb.parent.glob('nvidia-open-suite-*.deb'))])
     (work/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2),flush=True)
     if install:
@@ -41,8 +40,8 @@ def make_package(a,install=False):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)
     for action in ('prepare','install'):
-        p=sub.add_parser(action);p.add_argument('--work',type=Path,required=True);p.add_argument('--source',type=Path);p.add_argument('--archive',type=Path);p.add_argument('--kernel',help='Installed original DKMS ABI to inspect; defaults to running kernel');p.add_argument('--driver-version',help='Explicit adapted NVIDIA version; prepare does not require host NVIDIA/DKMS detection');p.add_argument('--provide-version',action='append',default=[],metavar='PACKAGE=VERSION',help='Exact target distribution version for a provided NVIDIA kernel package')
-        p.add_argument('--firmware-package',metavar='PACKAGE=VERSION',help='Exact target firmware dependency; default Debian firmware-nvidia-gsp, never inferred from build host')
+        p=sub.add_parser(action);p.add_argument('--work',type=Path,required=True);p.add_argument('--source',type=Path);p.add_argument('--archive',type=Path);p.add_argument('--kernel',help='Installed original DKMS ABI to inspect; defaults to running kernel');p.add_argument('--driver-version',help='Explicit adapted NVIDIA version; prepare does not require host NVIDIA/DKMS detection');p.add_argument('--provide-version',action='append',default=[],metavar='PACKAGE=VERSION',help='Full target nvidia-kernel-open-dkms version, including epoch; defaults to installed package')
+        p.add_argument('--firmware-package',metavar='PACKAGE=VERSION',help='Full target firmware PACKAGE=VERSION; defaults to installed firmware-nvidia-gsp independently')
     sub.add_parser('status')
     a=parser.parse_args()
     if a.action in ('prepare','install'):make_package(a,a.action=='install');return 0
