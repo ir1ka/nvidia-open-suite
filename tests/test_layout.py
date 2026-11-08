@@ -25,6 +25,7 @@ class ToolkitLayout(unittest.TestCase):
    self.assertTrue((destination/'nvidia-bar1-p2p/patches/dynamic-bar1-p2p.patch').is_file())
    self.assertTrue((destination/'nvidia-bar1-p2p/tests/dynamic_uvm_fixture.c').is_file())
    self.assertFalse((destination/'nvidia-open-suite/components').exists())
+   self.assertFalse((destination/'nvidia-open-suite/tests/hardware').exists())
    self.assertFalse((destination/'nvidia-open-suite/.git').exists())
    self.assertFalse((destination/'nvidia-open-suite/release.json').exists())
    self.assertFalse((destination/'nvidia-open-suite/tools/check_release.py').exists())

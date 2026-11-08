@@ -184,6 +184,38 @@ DKMS attempts automatic rebuilds after kernel updates. Missing headers, incompat
 
 Historical container recipes tied to old delivery artifacts and fixed kernel ABIs have been removed. Build timestamps come from the selected registry profile; the Suite module-check version is rendered from Suite metadata. Patch context and test-fixture version literals are intentional, not independent configuration. File-ownership guards, target-ABI checks, and build-snapshot checks remain active.
 
+## PCIe P2P measurements
+
+Measured on 2026-11-08 on **Debian 13**, kernel `6.12.115+deb13.1-amd64`, Suite 2.1.0 / NVIDIA 610.43.02, with two A100 PCIe 40 GB cards (64 GiB BAR1, PCIe Gen4 x16) and two modified 22 GB RTX 2080 Ti cards (256 MiB BAR1, PCIe Gen3 x16) behind PEX 88096. These are observations on this host, not guarantees for other cards or platforms.
+
+The host was idle before testing. NVLink was temporarily disabled and dynamic BAR1 P2P enabled; A100 used full BAR1 and RTX used dynamic mappings. ACS and BAR sizes were not changed. After testing, default parameters and nvidia-persistenced were restored: Suite stayed loaded, NVLink enabled, dynamic BAR1 disabled. Cross-model A100↔2080 Ti CUDA P2P remains unsupported.
+
+**The two latency measurements have different meanings.** NVIDIA [CUDA Samples v12.8 p2pBandwidthLatencyTest](https://github.com/NVIDIA/cuda-samples/blob/v12.8/Samples/5_Domain_Specific/p2pBandwidthLatencyTest/p2pBandwidthLatencyTest.cu) measures 100 queued 16-byte copies with CUDA Events and reports average GPU copy latency; its separate CPU matrix measures submission time. Our latency test measures GPU-resident ping-pong RTT, dependent remote loads, and stores/system fences. RTT/2 is not a measured one-way delay.
+
+| Test / metric | A100 pair | RTX 2080 Ti pair |
+|---|---:|---:|
+| CUDA Samples CE write bandwidth, GB/s | 18.95–18.99 | 13.16 |
+| CUDA Samples bidirectional aggregate, GB/s | 37.81–37.88 | 25.91 |
+| CUDA Samples CE read bandwidth, GB/s | 20.01–20.06 | 13.125–13.13 |
+| CUDA Samples GPU write-copy latency, µs | 2.170 / 2.710 | 1.425 / 1.525 |
+| CUDA Samples GPU read-copy latency, µs | 14.195 / 13.610 | 5.960 / 5.865 |
+| Suite CE copy bandwidth, GB/s | 25.69 | 13.33 |
+| Suite bidirectional CE aggregate, GB/s | 43.69 | 22.94 |
+| Suite ping-pong RTT P50 / P95 / P99, µs | 2.402 / 2.930 / 2.998 | 1.676 / 2.064 / 2.125 |
+| Suite dependent remote load P50 / P95 / P99, µs | 1.122 / 1.178 / 1.940 | 1.060 / 1.082 / 1.089 |
+| Suite remote store + system fence P50 / P95 / P99, µs | 2.272 / 2.735 / 2.804 | 1.571 / 1.601 / 2.110 |
+| Suite empty system fence P50 / P95 / P99, µs | 2.197 / 2.269 / 2.336 | 1.504 / 1.756 / 1.818 |
+
+Samples was built **without modifying its source**, using the default copy engine and `--numElems=8388608` (32 MiB). `--p2p_read` adds the read matrices; its bidirectional test is unchanged. Ten alternating pair rounds were run in each mode; the first two were discarded. Samples entries above are medians across eight runs per off-diagonal matrix cell; slash-separated copy latencies retain the two cells separately. A100 write bandwidth varied from **15.96 to 26.28 GB/s**, and bidirectional bandwidth from **31.86 to 51.53 GB/s**; RTX ranges were 13.16–13.17 and 25.89–25.93 GB/s. No clocks were locked. Samples uses five transfers per batch and warns that GPU Boost affects results; its medians are not peak-throughput claims.
+
+Suite bandwidth used 32 MiB × 64 transfers, measured in the preceding validation session: unidirectional CUDA Events around `cudaMemcpyAsync(cudaMemcpyDefault)`, and bidirectional host wall time including submission/synchronization. It is not a matched statistical comparison with Samples, whose queued execution is gated by a delay kernel and timed with GPU events. Both tests confirmed P2P access; the sample's disabled-P2P and diagonal matrices are excluded from the table.
+
+Suite latency used 24 rounds with alternating pair order, 200 ms warmup per GPU per pair phase, and both initiators. The first two rounds and first 128 of 2048 operations per direction were discarded, leaving 84,480 samples per pair/metric. `clock64()` samples were calibrated with each kernel's aggregate `clock64`/`globaltimer` ratio; direct per-operation `globaltimer` timing was rejected because A100 showed approximately 1.024 µs quantization. Timings include instrumentation overhead (median approximately 32 ns on A100 and 24 ns on RTX). Read-chain and write-result checks and normal cleanup without cudaDeviceReset passed.
+
+During RTT measurement the effective SM clock was about 1410 MHz on A100 and a median 1874 MHz on RTX (1830–1905 MHz). The approximately 0.727 µs RTT gap tracks the approximately 0.693 µs empty-system-fence gap much more closely than the approximately 0.063 µs remote-load gap. This supports GPU-side synchronization and clock differences as major contributors; it does not isolate architecture, mapping mode, or physical wire latency. These operations overlap and their times cannot simply be added. Store-issue-only timings were close to timer overhead and do not establish remote arrival time.
+
+The [hardware test guide](https://github.com/ir1ka/nvidia-open-suite/blob/main/tests/hardware/README.md) documents compilation and reproduction. Our programs and analysis scripts under `tests/hardware/` are **Git/source-only: neither the DKMS deb nor the tools deb includes them**. CUDA Samples sources/binaries and raw experiment logs are not vendored or packaged. No benchmark runs automatically during installation or ordinary source tests.
+
 ## Dependencies and attribution
 
 - Required upstream: [amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker), pinned commit `2c7e2ecd7944e791fec040d2680036beb4a9327b`, GPL v2, in `vendor/cmpunlocker`. Suite uses its preparation script, all 14 patches, constants, and Gen2 behavior, adding prepare-only adaptation in a working copy before Suite patches. Its installer, GRUB modifications, and passthrough deployment are not run. No separate cmpunlocker deb is required. Original LICENSE and CREDITS files are preserved.

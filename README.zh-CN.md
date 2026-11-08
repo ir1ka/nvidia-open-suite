@@ -208,3 +208,35 @@ DKMS 更新内核后自动尝试重编译；缺少 headers、接口不兼容或�
 维护者：IriKa Qiu（[ir1ka](https://github.com/ir1ka)）。通过 [Issues](https://github.com/ir1ka/nvidia-open-suite/issues) 报告问题与讨论，通过 [Pull Requests](https://github.com/ir1ka/nvidia-open-suite/pulls) 提交改进。安全问题请先请求私密渠道，不要在公开 issue 中附上漏洞细节或密钥。
 
 本项目采用 GPL v2；保留所有第三方原始许可证和署名。
+
+## PCIe P2P 实测结果
+
+2026-11-08 在 **Debian 13**、内核 `6.12.115+deb13.1-amd64`、Suite 2.1.0 / NVIDIA 610.43.02 上测量。PEX 88096 下连接两张 A100 PCIe 40 GB（64 GiB BAR1、PCIe Gen4 x16）和两张改装为 22 GB 的 RTX 2080 Ti（256 MiB BAR1、PCIe Gen3 x16）。结果仅代表本机，不保证其他硬件表现相同。
+
+测试前确认 GPU 空闲，临时关闭 NVLink 并开启动态 BAR1 P2P；A100 使用 full-BAR1 路径，RTX 使用动态映射。未修改 ACS 或 BAR 大小。测试后恢复默认参数及 nvidia-persistenced：Suite 保持加载，NVLink 恢复，动态 BAR1 关闭。A100↔2080 Ti 跨型号 CUDA P2P 仍不支持。
+
+**两种延迟的含义不同。** [CUDA Samples v12.8 p2pBandwidthLatencyTest](https://github.com/NVIDIA/cuda-samples/blob/v12.8/Samples/5_Domain_Specific/p2pBandwidthLatencyTest/p2pBandwidthLatencyTest.cu) 用 CUDA Events 测量连续排队的 100 次 16 字节复制，输出平均 GPU 复制延迟；独立的 CPU 矩阵测量提交时间。我们的延迟测试测量 GPU 内核内 ping-pong 往返、依赖式远端读以及写入/系统屏障。RTT 除以二不等于实际测得的单向延迟。
+
+| 测试与指标 | A100 两卡 | RTX 2080 Ti 两卡 |
+|---|---:|---:|
+| CUDA Samples CE 写入带宽，GB/s | 18.95–18.99 | 13.16 |
+| CUDA Samples 双向合计带宽，GB/s | 37.81–37.88 | 25.91 |
+| CUDA Samples CE 读取带宽，GB/s | 20.01–20.06 | 13.125–13.13 |
+| CUDA Samples GPU 写入复制延迟，µs | 2.170 / 2.710 | 1.425 / 1.525 |
+| CUDA Samples GPU 读取复制延迟，µs | 14.195 / 13.610 | 5.960 / 5.865 |
+| Suite CE 复制带宽，GB/s | 25.69 | 13.33 |
+| Suite 双向 CE 合计带宽，GB/s | 43.69 | 22.94 |
+| Suite 往返延迟 P50 / P95 / P99，µs | 2.402 / 2.930 / 2.998 | 1.676 / 2.064 / 2.125 |
+| Suite 依赖式远端读 P50 / P95 / P99，µs | 1.122 / 1.178 / 1.940 | 1.060 / 1.082 / 1.089 |
+| Suite 远端写＋系统屏障 P50 / P95 / P99，µs | 2.272 / 2.735 / 2.804 | 1.571 / 1.601 / 2.110 |
+| Suite 空系统屏障 P50 / P95 / P99，µs | 2.197 / 2.269 / 2.336 | 1.504 / 1.756 / 1.818 |
+
+Samples **未修改上游源码**，使用默认复制引擎及 `--numElems=8388608`（32 MiB）；`--p2p_read` 增加读取矩阵，不改变双向带宽测试。两种模式均交替运行两组卡十轮，丢弃前两轮。表中 Samples 数据为各非对角矩阵单元八次结果的中位数；复制延迟的斜杠分别列出两个单元。A100 单向写入实际范围为 **15.96–26.28 GB/s**，双向为 **31.86–51.53 GB/s**；RTX 对应范围为 13.16–13.17 和 25.89–25.93 GB/s。未锁频；Samples 每批仅复制五次，上游也提示 GPU Boost 会影响结果，不能把这些中位数当成吞吐上限。
+
+Suite 带宽来自此前验证：32 MiB × 64 次，单向用 CUDA Events 计时 `cudaMemcpyAsync(cudaMemcpyDefault)`，双向用包含提交和同步的 CPU 墙钟时间。Samples 则用 delay 内核等待提交完成后开始 GPU Event 计时，因此这不是相同统计条件下的性能对照。两种测试均确认 P2P 可用；表中排除了禁用 P2P 和矩阵对角线的结果。
+
+Suite 延迟交替运行 24 轮，每轮每张卡预热 200 ms，测试两个发起方向；丢弃前两轮及每方向 2048 次中的前 128 次，每组每项共 84,480 个样本。使用 `clock64()` 并按每个内核的总周期数/总时长校准；A100 的逐操作 `globaltimer` 存在约 1.024 µs 量化，因此未用它计算最终分布。数据包含计时开销，其中位数约为 A100 32 ns、RTX 24 ns。依赖读链、写入结果及不调用 cudaDeviceReset 的正常退出清理均通过。
+
+RTT 测量期间，A100 有效 SM 时钟约 1410 MHz，RTX 中位数约 1874 MHz（1830–1905 MHz）。RTT 中位数差约 0.727 µs，空系统屏障差约 0.693 µs，远端读仅差约 0.063 µs，支持 GPU 侧同步及频率差异为主要贡献者。但尚未独立控制架构和映射模式，不能据此确定纯链路延迟；各项开销会重叠，不能简单相加。仅发出写入的时间接近计时开销，不表示数据已经到达对端。
+
+[硬件测试说明](https://github.com/ir1ka/nvidia-open-suite/blob/main/tests/hardware/README.md) 提供编译与复现方法。`tests/hardware/` 下的自有测试程序和分析脚本**仅保存在 Git/源码中，DKMS deb 和 tools deb 均不包含**。CUDA Samples 源码、二进制及原始实验日志不进入仓库或软件包；安装和常规源码测试不会自动运行 GPU 测试。

@@ -65,6 +65,7 @@ def export_toolkit(destination):
     def suite_ignored(path,names):
         result=ignored(path,names)
         if Path(path)==ROOT and 'components' in names:result.add('components')
+        if Path(path)==ROOT/'tests' and 'hardware' in names:result.add('hardware')
         return result
     shutil.copytree(ROOT,destination/'nvidia-open-suite',ignore=suite_ignored)
     shutil.copytree(BAR1,destination/'nvidia-bar1-p2p',ignore=ignored)
