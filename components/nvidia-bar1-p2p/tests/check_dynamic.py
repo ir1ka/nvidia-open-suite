@@ -7,7 +7,9 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,required=True);a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,required=True)
+p.add_argument('--compile-only', action='store_true', help='Compile fixtures and inspect integration without executing synthetic runtime tests')
+a=p.parse_args()
 rm=a.source/'src/nvidia/src/kernel/rmapi'
 def extract(s,name):
  m=re.search(r'(?:static\s+)?(?:NV_STATUS|NvBool|void|bool)\s+'+name+r'\s*\([^;{]*\)\s*\{',s);assert m,name
@@ -57,6 +59,7 @@ typedef uint64_t RmPhysAddr;typedef int NvBool;typedef int NV_STATUS;
 #define MIB (1ULL<<20)
 #define NVCPU_IS_ARM 0
 #define GPU_ARCHITECTURE_AMPERE 0x170
+#define GPU_ARCHITECTURE_ADA 0x190
 #define GPU_ARCHITECTURE_TURING 0x160
 #define GPU_IMPLEMENTATION_TU102 2
 #define NV_REG_STR_RM_FORCE_P2P_TYPE_DEFAULT 0
@@ -136,7 +139,19 @@ int main(void){
  for(unsigned i=0;i<3;i++){buses[i].size=256*MIB;buses[i].bar1[0].mappableLength=256*MIB;buses[i].bar1[0].pVAS=&buses[i];g[i]=(OBJGPU){.bus=&buses[i],.bif=&bif,.memory=&fb,.instance=i,.busInfo={i},.arch=GPU_ARCHITECTURE_AMPERE,.opt=1,.type=2,.phys=1ULL<<40};}
  assert(kbusDynamicBar1P2PPair(g,g+1));assert(!kbusDynamicBar1P2PPair(g,g));
  g[0].opt=0;assert(!kbusDynamicBar1P2PPair(g,g+1));g[0].opt=1;
- g[0].arch=0x180;assert(!kbusDynamicBar1P2PPair(g,g+1));g[0].arch=GPU_ARCHITECTURE_AMPERE;
+ // GA102/103/104/106/107 and AD102/103/104/106/107 share the family gate.
+ // This checks admission only, not physical compatibility or CUDA acceptance.
+ const unsigned consumer_impls[]={2,3,4,6,7};
+ for(unsigned i=0;i<5;i++){
+  g[0].impl=consumer_impls[i];
+  g[0].arch=GPU_ARCHITECTURE_AMPERE;assert(kbusDynamicBar1P2PPair(g,g+1));
+  g[0].arch=GPU_ARCHITECTURE_ADA;assert(kbusDynamicBar1P2PPair(g,g+1));
+  g[0].opt=0;assert(!kbusDynamicBar1P2PPair(g,g+1));g[0].opt=1;
+ }
+ g[0].arch=0x180;assert(!kbusDynamicBar1P2PPair(g,g+1));
+ g[0].arch=0x1a0;assert(!kbusDynamicBar1P2PPair(g,g+1));
+ g[0].arch=0x1b0;assert(!kbusDynamicBar1P2PPair(g,g+1));
+ g[0].arch=GPU_ARCHITECTURE_AMPERE;g[0].impl=0;
  g[0].arch=GPU_ARCHITECTURE_TURING;g[0].impl=2;assert(kbusDynamicBar1P2PPair(g,g+1));
  g[0].impl=4;assert(!kbusDynamicBar1P2PPair(g,g+1));g[0].arch=GPU_ARCHITECTURE_AMPERE;
  g[0].mig=1;assert(!kbusDynamicBar1P2PPair(g,g+1));g[0].mig=0;
@@ -218,7 +233,8 @@ int main(void){
 with tempfile.TemporaryDirectory() as temp:
  c=Path(temp)/'test.c';exe=Path(temp)/'test';c.write_text(pre+functions+main)
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-sanitize-recover=all','-g',str(c),'-o',str(exe)],check=True)
- subprocess.run([exe],check=True)
+ if not a.compile_only: subprocess.run([exe],check=True)
+ else: print('PASS fixture compilation only; runtime assertions not executed')
 # Structural integration assertions complement execution of the actual manager.
 s=(rm/'nv_gpu_ops.c').read_text();free=extract(s,'nvGpuOpsFreeDupedHandle');destroy=extract(s,'nvGpuOpsDeviceDestroy')
 assert free.index('_nvGpuOpsDynBar1Destroy')<free.index('rmGpuGroupLockRelease')<free.index('_disablePeerAccess')<free.index('pRmApi->Free')
@@ -237,4 +253,5 @@ with tempfile.TemporaryDirectory() as temp:
  template=Path(__file__).with_name('dynamic_uvm_fixture.c').read_text()
  c.write_text(template.replace('/* ACTUAL_ENABLE_PEERS */', enable))
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(c),'-o',str(exe)],check=True)
- subprocess.run([exe],check=True)
+ if not a.compile_only: subprocess.run([exe],check=True)
+ else: print('PASS fixture compilation only; runtime assertions not executed')
