@@ -57,3 +57,13 @@ class Selection(unittest.TestCase):
   with self.assertRaisesRegex(ValueError,'Non-Debian'):package.firmware_dependency(versions={'nvidia-dkms-610-open':'610.43.02-0ubuntu1'})
   for value in ('bad', 'pkg=610.43.03-1', 'pkg=610.43.02;bad', 'pkg=610.43.02-1, evil', '../pkg=610.43.02'):
    with self.subTest(value=value), self.assertRaises(ValueError):package.firmware_dependency(value)
+
+class OpenProviderAliases(unittest.TestCase):
+ def test_defaults_do_not_conflict_with_open_meta_package(self):
+  names=package.provided_packages({'nvidia-kernel-open-dkms':'610.43.02-1'})
+  self.assertIn('nvidia-kernel-open-dkms',names)
+  self.assertNotIn('nvidia-kernel-dkms',names)
+  self.assertNotIn('nvidia-dkms-610',names)
+ def test_explicit_generic_provider_alias_remains_available(self):
+  names=package.provided_packages({'nvidia-kernel-dkms':'610.43.02-1'})
+  self.assertIn('nvidia-kernel-dkms',names)

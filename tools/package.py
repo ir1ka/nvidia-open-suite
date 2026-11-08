@@ -6,6 +6,13 @@ from pathlib import Path
 from source import ROOT,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files,require_supported,driver_registry
 NAME='nvidia-open-suite-dkms'
 STOCK=('nvidia-kernel-dkms','nvidia-open-kernel-dkms','nvidia-kernel-open-dkms','nvidia-dkms-'+DRIVER.split('.')[0],'nvidia-dkms-'+DRIVER.split('.')[0]+'-open')
+OPEN_PROVIDERS=tuple(name for name in STOCK if 'open' in name)
+
+def provided_packages(versions):
+    # Explicit aliases may be needed by a distribution whose open provider has
+    # a generic name. Never advertise proprietary providers by default.
+    return tuple(dict.fromkeys((*OPEN_PROVIDERS,*versions)))
+
 CONFLICTS=(*STOCK,'nvidia-bar1-p2p-dkms','nvidia-bar1-p2p-prebuilt')
 
 def validate_provides(versions):
@@ -101,7 +108,7 @@ Vcs-Browser: https://github.com/ir1ka/nvidia-open-suite
 Package: {NAME}
 Architecture: amd64
 Depends: ${{misc:Depends}}, {firmware}, g++, bash, pciutils, coreutils, gawk | mawk
-Provides: nvidia-kernel-{DRIVER}, {', '.join(p+' (= '+versions.get(p,DRIVER)+')'for p in STOCK)}
+Provides: nvidia-kernel-{DRIVER}, {', '.join(p+' (= '+versions.get(p,DRIVER)+')'for p in provided_packages(versions))}
 Conflicts: {', '.join(CONFLICTS)}
 Replaces: {', '.join(CONFLICTS)}
 Suggests: nvidia-open-suite-tools
