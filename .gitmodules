@@ -1,0 +1,3 @@
+[submodule "vendor/cmpunlocker"]
+	path = vendor/cmpunlocker
+	url = https://github.com/amoghmunikote/cmpunlocker.git

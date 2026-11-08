@@ -1,0 +1,530 @@
+--- a/kernel-open/common/inc/nv-proto.h
++++ b/kernel-open/common/inc/nv-proto.h
+@@ -84,7 +84,7 @@
+ void          nvidia_modeset_probe             (const nv_linux_state_t *nvl);
+ NvBool        nv_is_uuid_in_gpu_exclusion_list (const char *);
+ 
+-NV_STATUS     nv_parse_per_device_option_string(nvidia_stack_t *sp);
++NV_STATUS     nv_parse_per_device_option_string(nvidia_stack_t *sp, nv_state_t *probing_nv);
+ void          nv_enable_cdmm_mode(nvidia_stack_t *sp);
+ NvBool        nv_is_galaxy_workstation         (void);
+ 
+--- a/kernel-open/nvidia/nv-pci.c
++++ b/kernel-open/nvidia/nv-pci.c
+@@ -2241,7 +2241,7 @@
+     rm_get_gpu_uuid_raw(sp, nv);
+ 
+     /* Parse and set any per-GPU registry keys specified. */
+-    nv_parse_per_device_option_string(sp);
++    nv_parse_per_device_option_string(sp, nv);
+ 
+     rm_set_rm_firmware_requested(sp, nv);
+ 
+--- a/kernel-open/nvidia/nv.c
++++ b/kernel-open/nvidia/nv.c
+@@ -120,6 +120,7 @@
+ 
+ MODULE_INFO(supported, "external");
+ MODULE_VERSION(NV_VERSION_STRING);
++MODULE_INFO(full_bar1_p2p, "1.0.0-explicit-opt-in");
+ MODULE_DESCRIPTION("NVIDIA core GPU kernel module");
+ MODULE_ALIAS_CHARDEV_MAJOR(NV_MAJOR_DEVICE_NUMBER);
+ 
+--- a/kernel-open/nvidia/os-registry.c
++++ b/kernel-open/nvidia/os-registry.c
+@@ -202,7 +202,7 @@
+  *
+  * @return NV_OK if succeeds, or NV_STATUS error code otherwise.
+  */
+-NV_STATUS nv_parse_per_device_option_string(nvidia_stack_t *sp)
++NV_STATUS nv_parse_per_device_option_string(nvidia_stack_t *sp, nv_state_t *probing_nv)
+ {
+     NV_STATUS status = NV_OK;
+     char *option_string = NULL;
+@@ -211,6 +211,7 @@
+     NvU32 data, domain, bus, slot, func;
+     nv_linux_state_t *nvl = NULL;
+     nv_state_t *nv = NULL;
++    nv_state_t *full_bar1_probing_nv = NULL;
+ 
+     if (NVreg_RegistryDwordsPerDevice != NULL)
+     {
+@@ -242,6 +243,7 @@
+             // which needs special parsing as it is NOT a dword.
+             if (strcmp(name, NV_REG_PCI_DEVICE_BDF) == 0)
+             {
++                full_bar1_probing_nv = NULL;
+                 status = pci_str_to_bdf(value, &domain, &bus, &slot, &func);
+ 
+                 // Check if PCI_DEV id string was in a valid format or NOT.
+@@ -252,6 +254,12 @@
+                 }
+                 else
+                 {
++                    /* Only the new opt-in key may resolve the unpublished
++                     * probing GPU. Preserve all legacy keys' parsing behavior. */
++                    if (probing_nv && probing_nv->pci_info.domain == domain &&
++                        probing_nv->pci_info.bus == bus && probing_nv->pci_info.slot == slot &&
++                        probing_nv->pci_info.function == func)
++                        full_bar1_probing_nv = probing_nv;
+                     nvl = find_pci(domain, bus, slot, func);
+                     //
+                     // If NO GPU found corresponding to this GPU, then reset
+@@ -276,6 +284,12 @@
+             // (<key, value> pairs) until a valid PCI_DEV string is encountered
+             // in the commandline.
+             //
++            if (!strcmp(name, "RMFullBar1P2P") && full_bar1_probing_nv != NULL)
++            {
++                data = (NvU32)simple_strtoul(value, NULL, 0);
++                rm_write_registry_dword(sp, full_bar1_probing_nv, name, data);
++                continue;
++            }
+             if (!nv)
+                 continue;
+ 
+--- a/src/nvidia/arch/nvalloc/unix/src/osinit.c
++++ b/src/nvidia/arch/nvalloc/unix/src/osinit.c
+@@ -2475,6 +2475,11 @@
+                 RmFreeX86EmuState(pGpu);
+ #endif
+ 
++                /* All work and GPU state are stopped. Revoke scoped mappings
++                 * before GPUMGR/NV DMA identity disappears (vendor bug 1811006).
++                 * Cross-GPU shared sysmem may outlive this GPU's RM device. */
++                iovaspaceDrainFullBar1Mappings(pGpu);
++
+                 gpumgrDetachGpu(gpuInstance);
+                 gpumgrDestroyDevice(deviceInstance);
+ 
+--- a/src/nvidia/generated/g_io_vaspace_nvoc.h
++++ b/src/nvidia/generated/g_io_vaspace_nvoc.h
+@@ -117,6 +117,9 @@
+     struct IOVAMAPPING *pNext;
+ 
+     // OS data associated with this mapping. Core RM doesn't touch this.
++    /* Host-only list links for scoped full-aperture BAR1 DMA teardown. Not the memdesc list. */
++    struct IOVAMAPPING *pFullBar1VasPrev;
++    struct IOVAMAPPING *pFullBar1VasNext;
+     POS_IOVA_MAPPING_DATA pOsData;
+ 
+     //
+@@ -167,6 +170,7 @@
+ 
+     // Data members
+     NvU64 mappingCount;
++    PIOVAMAPPING pFullBar1RootMappings;
+ };
+ 
+ 
+--- a/src/nvidia/generated/g_kern_bus_nvoc.c
++++ b/src/nvidia/generated/g_kern_bus_nvoc.c
+@@ -13,6 +13,7 @@
+ #include "nvport/inline/util_valist.h"
+ #include "utils/nvassert.h"
+ #include "g_kern_bus_nvoc.h"
++#include "gpu/bus/kern_bus.h"
+ 
+ 
+ #ifdef DEBUG
+@@ -1063,6 +1064,13 @@
+     {
+         pThis->__kbusGetBar1P2PDmaInfo__ = &kbusGetBar1P2PDmaInfo_GH100;
+     }
++    // Additional devices use the same TU102+ static aperture mechanism.
++    else if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0xbdf0ffe0UL) ) ||
++             ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x000030ffUL) ))
++    {
++        pThis->__kbusGetBar1P2PDmaInfo__ = &kbusGetBar1P2PDmaInfo_FULLBAR1;
++    }
++
+     // default
+     else
+     {
+@@ -1111,6 +1119,13 @@
+     {
+         pThis->__kbusCreateP2PMappingForBar1P2P__ = &kbusCreateP2PMappingForBar1P2P_GH100;
+     }
++    // Additional devices use the same TU102+ static aperture mechanism.
++    else if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0xbdf0ffe0UL) ) ||
++             ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x000030ffUL) ))
++    {
++        pThis->__kbusCreateP2PMappingForBar1P2P__ = &kbusCreateP2PMappingForBar1P2P_FULLBAR1;
++    }
++
+     // default
+     else
+     {
+@@ -1123,6 +1138,13 @@
+     {
+         pThis->__kbusRemoveP2PMappingForBar1P2P__ = &kbusRemoveP2PMappingForBar1P2P_GH100;
+     }
++    // Additional devices use the same TU102+ static aperture mechanism.
++    else if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0xbdf0ffe0UL) ) ||
++             ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x000030ffUL) ))
++    {
++        pThis->__kbusRemoveP2PMappingForBar1P2P__ = &kbusRemoveP2PMappingForBar1P2P_FULLBAR1;
++    }
++
+     // default
+     else
+     {
+@@ -1135,6 +1157,13 @@
+     {
+         pThis->__kbusHasPcieBar1P2PMapping__ = &kbusHasPcieBar1P2PMapping_GH100;
+     }
++    // Additional devices use the same TU102+ static aperture mechanism.
++    else if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0xbdf0ffe0UL) ) ||
++             ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x000030ffUL) ))
++    {
++        pThis->__kbusHasPcieBar1P2PMapping__ = &kbusHasPcieBar1P2PMapping_FULLBAR1;
++    }
++
+     // default
+     else
+     {
+@@ -1147,6 +1176,13 @@
+     {
+         pThis->__kbusIsPcieBar1P2PMappingSupported__ = &kbusIsPcieBar1P2PMappingSupported_GH100;
+     }
++    // Additional devices use the same TU102+ static aperture mechanism.
++    else if (( ((chipHal_HalVarIdx >> 5) == 1UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0xbdf0ffe0UL) ) ||
++             ( ((chipHal_HalVarIdx >> 5) == 2UL) && ((1UL << (chipHal_HalVarIdx & 0x1f)) & 0x000030ffUL) ))
++    {
++        pThis->__kbusIsPcieBar1P2PMappingSupported__ = &kbusIsPcieBar1P2PMappingSupported_FULLBAR1;
++    }
++
+     // default
+     else
+     {
+--- a/src/nvidia/inc/kernel/gpu/bus/kern_bus.h
++++ b/src/nvidia/inc/kernel/gpu/bus/kern_bus.h
+@@ -1,3 +1,18 @@
+ 
+ #include "g_kern_bus_nvoc.h"
+ 
++
++/* Explicit full-aperture BAR1 extension, host RM only. */
++NvBool kbusFullBar1P2PRequested(struct OBJGPU *pGpu);
++NvBool kbusFullBar1P2PEligible(struct OBJGPU *pGpu, struct KernelBus *pBus);
++NvBool kbusIsPcieBar1P2PMappingSupported_FULLBAR1(struct OBJGPU *pGpu0,
++    struct KernelBus *pBus0, struct OBJGPU *pGpu1, struct KernelBus *pBus1);
++
++NV_STATUS kbusGetBar1P2PDmaInfo_FULLBAR1(struct OBJGPU *pSrcGpu, struct OBJGPU *pPeerGpu,
++    struct KernelBus *pPeerBus, NvU64 *pAddress, NvU64 *pSize);
++NV_STATUS kbusCreateP2PMappingForBar1P2P_FULLBAR1(struct OBJGPU *pGpu0,
++    struct KernelBus *pBus0, struct OBJGPU *pGpu1, struct KernelBus *pBus1, NvU32 attributes);
++NV_STATUS kbusRemoveP2PMappingForBar1P2P_FULLBAR1(struct OBJGPU *pGpu0,
++    struct KernelBus *pBus0, struct OBJGPU *pGpu1, struct KernelBus *pBus1, NvU32 attributes);
++NvBool kbusHasPcieBar1P2PMapping_FULLBAR1(struct OBJGPU *pGpu0,
++    struct KernelBus *pBus0, struct OBJGPU *pGpu1, struct KernelBus *pBus1);
+--- a/src/nvidia/inc/kernel/mem_mgr/io_vaspace.h
++++ b/src/nvidia/inc/kernel/mem_mgr/io_vaspace.h
+@@ -1,3 +1,6 @@
+ 
+ #include "g_io_vaspace_nvoc.h"
+ 
++
++/* Revoke only the departing, opted-in full-aperture BAR1 device DMA mappings. */
++void iovaspaceDrainFullBar1Mappings(struct OBJGPU *pGpu);
+--- a/src/nvidia/src/kernel/gpu/bus/arch/hopper/kern_bus_gh100.c
++++ b/src/nvidia/src/kernel/gpu/bus/arch/hopper/kern_bus_gh100.c
+@@ -1459,7 +1459,9 @@
+     KernelBif *pKernelBif = GPU_GET_KERNEL_BIF(pGpu0);
+ 
+     // Only support if available by default, or if forced by regkey.
+-    if ((pKernelBif->pcieP2PType != NV_REG_STR_RM_PCIEP2P_TYPE_BAR1) &&
++    NvBool fullBar1 = kbusFullBar1P2PEligible(pGpu0, pKernelBus0) &&
++                      kbusFullBar1P2PEligible(pGpu1, pKernelBus1);
++    if (!fullBar1 && (pKernelBif->pcieP2PType != NV_REG_STR_RM_PCIEP2P_TYPE_BAR1) &&
+         !pKernelBus0->getProperty(pKernelBus0, PDB_PROP_KBUS_SUPPORT_BAR1_P2P_BY_DEFAULT))
+     {
+         return NV_FALSE;
+--- a/src/nvidia/src/kernel/gpu/bus/arch/pascal/kern_bus_gp100.c
++++ b/src/nvidia/src/kernel/gpu/bus/arch/pascal/kern_bus_gp100.c
+@@ -59,6 +59,11 @@
+     NvU32      attributes
+ )
+ {
++    if (FLD_TEST_DRF(_P2PAPI, _ATTRIBUTES, _CONNECTION_TYPE, _PCIE_BAR1, attributes) &&
++        kbusFullBar1P2PEligible(pGpu0, pKernelBus0) &&
++        kbusFullBar1P2PEligible(pGpu1, pKernelBus1))
++        return kbusCreateP2PMappingForBar1P2P_HAL(pGpu0, pKernelBus0, pGpu1, pKernelBus1, attributes);
++
+     if (FLD_TEST_DRF(_P2PAPI, _ATTRIBUTES, _CONNECTION_TYPE, _NVLINK, attributes) ||
+         FLD_TEST_DRF(_P2PAPI, _ATTRIBUTES, _CONNECTION_TYPE, _NVLINK_INDIRECT, attributes))
+     {
+@@ -637,6 +642,12 @@
+     NvU32      attributes
+ )
+ {
++    if (FLD_TEST_DRF(_P2PAPI, _ATTRIBUTES, _CONNECTION_TYPE, _PCIE_BAR1, attributes) &&
++        ((kbusFullBar1P2PEligible(pGpu0, pKernelBus0) &&
++          kbusFullBar1P2PEligible(pGpu1, pKernelBus1)) ||
++         kbusHasPcieBar1P2PMapping_HAL(pGpu0, pKernelBus0, pGpu1, pKernelBus1)))
++        return kbusRemoveP2PMappingForBar1P2P_HAL(pGpu0, pKernelBus0, pGpu1, pKernelBus1, attributes);
++
+     if (FLD_TEST_DRF(_P2PAPI, _ATTRIBUTES, _CONNECTION_TYPE, _NVLINK, attributes) ||
+         FLD_TEST_DRF(_P2PAPI, _ATTRIBUTES, _CONNECTION_TYPE, _NVLINK_INDIRECT, attributes))
+     {
+--- a/src/nvidia/src/kernel/gpu/bus/kern_bus.c
++++ b/src/nvidia/src/kernel/gpu/bus/kern_bus.c
+@@ -29,6 +29,7 @@
+ #include "mem_mgr/gpu_vaspace.h"
+ #include "gpu/mmu/kern_gmmu.h"
+ #include "gpu/bus/kern_bus.h"
++#include "gpu/bif/kernel_bif.h"
+ #include "kernel/gpu/mem_mgr/mem_mgr.h"
+ #include "kernel/gpu/mem_sys/kern_mem_sys.h"
+ #include "platform/chipset/chipset.h"
+@@ -1366,3 +1367,83 @@
+ 
+     return NV_FALSE;
+ }
++
++
++/* No SKU restriction: physical FB address space, not client-visible/free FB. */
++NvBool
++kbusFullBar1P2PRequested(OBJGPU *pGpu)
++{
++    NvU32 enabled = 0;
++    return pGpu != NULL &&
++        osReadRegistryDword(pGpu, "RMFullBar1P2P", &enabled) == NV_OK && enabled == 1;
++}
++
++NvBool
++kbusFullBar1P2PEligible(OBJGPU *pGpu, KernelBus *pBus)
++{
++    MemoryManager *pMemory;
++    KernelBif *pBif;
++    NvU32 explicitType;
++    NvU64 mb;
++    if (NVCPU_IS_ARM || !kbusFullBar1P2PRequested(pGpu) || pBus == NULL ||
++        IS_VIRTUAL(pGpu) || IS_MIG_ENABLED(pGpu))
++        return NV_FALSE;
++    pBif = GPU_GET_KERNEL_BIF(pGpu);
++    pMemory = GPU_GET_MEMORY_MANAGER(pGpu);
++    if (pMemory == NULL || pBif == NULL ||
++        (pBif->forceP2PType != NV_REG_STR_RM_FORCE_P2P_TYPE_DEFAULT &&
++         pBif->forceP2PType != NV_REG_STR_RM_FORCE_P2P_TYPE_PCIEP2P)) return NV_FALSE;
++    if (osReadRegistryDword(pGpu, NV_REG_STR_RM_PCIEP2P_TYPE, &explicitType) == NV_OK &&
++        explicitType != NV_REG_STR_RM_PCIEP2P_TYPE_BAR1 &&
++        explicitType != NV_REG_STR_RM_PCIEP2P_TYPE_AUTO) return NV_FALSE;
++    mb = pMemory->Ram.fbAddrSpaceSizeMb;
++    if (mb == 0 || mb > (NV_U64_MAX >> 20) ||
++        kbusGetPciBarSize(pBus, 1) < (mb << 20) ||
++        !kbusIsStaticBar1Enabled(pGpu, pBus))
++        return NV_FALSE;
++    return NV_TRUE;
++}
++
++NvBool
++kbusIsPcieBar1P2PMappingSupported_FULLBAR1(OBJGPU *pGpu0, KernelBus *pBus0,
++                                         OBJGPU *pGpu1, KernelBus *pBus1)
++{
++    if (!kbusFullBar1P2PEligible(pGpu0, pBus0) ||
++        !kbusFullBar1P2PEligible(pGpu1, pBus1)) return NV_FALSE;
++    return kbusIsPcieBar1P2PMappingSupported_GH100(pGpu0, pBus0, pGpu1, pBus1);
++}
++
++NV_STATUS
++kbusGetBar1P2PDmaInfo_FULLBAR1(OBJGPU *pSrcGpu, OBJGPU *pPeerGpu,
++                              KernelBus *pPeerBus, NvU64 *pAddress, NvU64 *pSize)
++{
++    if (pSrcGpu == NULL || !kbusFullBar1P2PEligible(pSrcGpu, GPU_GET_KERNEL_BUS(pSrcGpu)) ||
++        !kbusFullBar1P2PEligible(pPeerGpu, pPeerBus)) return NV_ERR_NOT_SUPPORTED;
++    return kbusGetBar1P2PDmaInfo_GH100(pSrcGpu, pPeerGpu, pPeerBus, pAddress, pSize);
++}
++
++NV_STATUS
++kbusCreateP2PMappingForBar1P2P_FULLBAR1(OBJGPU *pGpu0, KernelBus *pBus0,
++                                      OBJGPU *pGpu1, KernelBus *pBus1, NvU32 attributes)
++{
++    if (!kbusFullBar1P2PEligible(pGpu0, pBus0) ||
++        !kbusFullBar1P2PEligible(pGpu1, pBus1)) return NV_ERR_NOT_SUPPORTED;
++    return kbusCreateP2PMappingForBar1P2P_GH100(pGpu0, pBus0, pGpu1, pBus1, attributes);
++}
++
++NvBool
++kbusHasPcieBar1P2PMapping_FULLBAR1(OBJGPU *pGpu0, KernelBus *pBus0,
++                                OBJGPU *pGpu1, KernelBus *pBus1)
++{
++    /* Existing ownership remains visible during teardown, even after opt-out. */
++    return kbusHasPcieBar1P2PMapping_GH100(pGpu0, pBus0, pGpu1, pBus1);
++}
++
++NV_STATUS
++kbusRemoveP2PMappingForBar1P2P_FULLBAR1(OBJGPU *pGpu0, KernelBus *pBus0,
++                                      OBJGPU *pGpu1, KernelBus *pBus1, NvU32 attributes)
++{
++    if (!kbusHasPcieBar1P2PMapping_GH100(pGpu0, pBus0, pGpu1, pBus1))
++        return NV_ERR_NOT_SUPPORTED;
++    return kbusRemoveP2PMappingForBar1P2P_GH100(pGpu0, pBus0, pGpu1, pBus1, attributes);
++}
+--- a/src/nvidia/src/kernel/mem_mgr/io_vaspace.c
++++ b/src/nvidia/src/kernel/mem_mgr/io_vaspace.c
+@@ -36,6 +36,10 @@
+ #include "core/system.h"
+ #include "mem_mgr/virt_mem_mgr.h"
+ #include "gpu/mmu/kern_gmmu.h"
++#include "gpu/bif/kernel_bif.h"
++#include "gpu/bus/kern_bus.h"
++#include "gpu/mem_mgr/mem_mgr.h"
++#include "nvrm_registry.h"
+ 
+ 
+ NV_STATUS
+@@ -53,6 +57,7 @@
+ {
+     NV_ASSERT_OR_RETURN(IO_VASPACE_A == classId, NV_ERR_INVALID_ARGUMENT);
+     pIOVAS->mappingCount = 0;
++    pIOVAS->pFullBar1RootMappings = NULL;
+     return NV_OK;
+ }
+ 
+@@ -60,6 +65,7 @@
+ iovaspaceDestruct_IMPL(OBJIOVASPACE *pIOVAS)
+ {
+     OBJVASPACE *pVAS = staticCast(pIOVAS, OBJVASPACE);
++
+ 
+     if (pIOVAS->mappingCount != 0)
+     {
+@@ -210,6 +216,31 @@
+ }
+ 
+ #if (RMCFG_FEATURE_PLATFORM_UNIX || RMCFG_FEATURE_MODS_FEATURES) && !NVCPU_IS_ARM
++/* Use the existing RM/GPU locking of this IOVAS; no cross-device global list. */
++static void
++_iovaspaceTrackFullBar1Root(OBJIOVASPACE *pIOVAS, PIOVAMAPPING pMapping, OBJGPU *pGpu)
++{
++    if (pGpu == NULL || !kbusFullBar1P2PEligible(pGpu, GPU_GET_KERNEL_BUS(pGpu)))
++        return;
++    pMapping->pFullBar1VasNext = pIOVAS->pFullBar1RootMappings;
++    if (pIOVAS->pFullBar1RootMappings != NULL)
++        pIOVAS->pFullBar1RootMappings->pFullBar1VasPrev = pMapping;
++    pIOVAS->pFullBar1RootMappings = pMapping;
++}
++
++static void
++_iovaspaceUntrackFullBar1Root(OBJIOVASPACE *pIOVAS, PIOVAMAPPING pMapping)
++{
++    if (pMapping->pFullBar1VasPrev != NULL)
++        pMapping->pFullBar1VasPrev->pFullBar1VasNext = pMapping->pFullBar1VasNext;
++    else if (pIOVAS->pFullBar1RootMappings == pMapping)
++        pIOVAS->pFullBar1RootMappings = pMapping->pFullBar1VasNext;
++    if (pMapping->pFullBar1VasNext != NULL)
++        pMapping->pFullBar1VasNext->pFullBar1VasPrev = pMapping->pFullBar1VasPrev;
++    pMapping->pFullBar1VasPrev = NULL;
++    pMapping->pFullBar1VasNext = NULL;
++}
++
+ static PIOVAMAPPING
+ _iovaspaceCreateMappingDataFromMemDesc
+ (
+@@ -475,7 +506,9 @@
+         }
+     }
+     memdescAddIommuMap(pPhysMemDesc, pIovaMapping);
++    _iovaspaceTrackFullBar1Root(pIOVAS, pIovaMapping, pMappingGpu);
+     ++pIOVAS->mappingCount;
++
+ 
+     return NV_OK;
+ 
+@@ -539,6 +572,7 @@
+         pNextIovaMapping = pTmpIovaMapping;
+     }
+ 
++    _iovaspaceUntrackFullBar1Root(pIOVAS, pIovaMapping);
+     memdescRemoveIommuMap(pPhysMemDesc, pIovaMapping);
+ 
+     osIovaUnmap(pIovaMapping);
+@@ -616,4 +650,31 @@
+     iovaspaceDestroyMapping(pIOVAS, pIovaMapping);
+ }
+ 
++#endif
++
++void
++iovaspaceDrainFullBar1Mappings(OBJGPU *pGpu)
++{
++#if (RMCFG_FEATURE_PLATFORM_UNIX || RMCFG_FEATURE_MODS_FEATURES) && !NVCPU_IS_ARM
++    OBJIOVASPACE *pIOVAS = iovaspaceFromId(pGpu->busInfo.iovaspaceId);
++    NvU32 drained = 0;
++    if (pIOVAS == NULL)
++        return;
++    while (pIOVAS->pFullBar1RootMappings != NULL)
++    {
++        PIOVAMAPPING pMapping = pIOVAS->pFullBar1RootMappings;
++        NV_ASSERT(pMapping->iovaspaceId == pGpu->busInfo.iovaspaceId);
++        /* Destroy this device's DMA mapping, not its pages or another IOVAS's map.
++         * Existing root destruction also detaches all of this IOVAS's children. */
++        iovaspaceDestroyMapping(pIOVAS, pMapping);
++        drained++;
++    }
++    if (drained != 0)
++        NV_PRINTF(LEVEL_INFO, "FULL_BAR1_IOVA DRAIN id=%x roots=%u remaining=%llu\n",
++                  pGpu->busInfo.iovaspaceId, drained, pIOVAS->mappingCount);
++#endif
++}
++
++#if (RMCFG_FEATURE_PLATFORM_UNIX || RMCFG_FEATURE_MODS_FEATURES) && !NVCPU_IS_ARM
++
+ #endif // (RMCFG_FEATURE_PLATFORM_UNIX || RMCFG_FEATURE_MODS_FEATURES) && !NVCPU_IS_ARM
+--- a/src/nvidia/src/kernel/platform/p2p/p2p_caps.c
++++ b/src/nvidia/src/kernel/platform/p2p/p2p_caps.c
+@@ -314,6 +314,24 @@
+     return NV_OK;
+ }
+ 
++/* Only a complete, opted-in peer set can bypass legacy mailbox restrictions.
++ * Keep atomics disabled: full BAR1 alone does not establish atomic routing. */
++static NvBool
++_kp2pFullBar1Override(NvU32 gpuMask)
++{
++    NvU32 instance = 0;
++    OBJGPU *first = NULL, *peer;
++    if (gpumgrGetSubDeviceCount(gpuMask) < 2) return NV_FALSE;
++    while ((peer = gpumgrGetNextGpu(gpuMask, &instance)) != NULL)
++    {
++        if (!kbusFullBar1P2PEligible(peer, GPU_GET_KERNEL_BUS(peer))) return NV_FALSE;
++        if (first != NULL && !kbusIsPcieBar1P2PMappingSupported_HAL(first,
++                GPU_GET_KERNEL_BUS(first), peer, GPU_GET_KERNEL_BUS(peer))) return NV_FALSE;
++        if (first == NULL) first = peer;
++    }
++    return first != NULL;
++}
++
+ // Returns true if overrides are enabled for PCI-E.
+ static NvBool
+ _kp2pCapsCheckStatusOverridesForPcie
+@@ -373,6 +391,14 @@
+             return NV_TRUE;
+         }
+ 
++    }
++
++    if (_kp2pFullBar1Override(gpuMask))
++    {
++        *pP2PReadCapStatus = NV0000_P2P_CAPS_STATUS_OK;
++        *pP2PWriteCapStatus = NV0000_P2P_CAPS_STATUS_OK;
++        *pP2PAtomicsCapStatus = NV0000_P2P_CAPS_STATUS_NOT_SUPPORTED;
++        return NV_TRUE;
+     }
+ 
+     return NV_FALSE;
+@@ -722,11 +748,11 @@
+     NvU8 readCapStatus = *pP2PReadCapStatus;
+     NvU8 atomicsCapStatus = *pP2PAtomicsCapStatus;
+ 
+-    if (((pKernelBif->forceP2PType != NV_REG_STR_RM_FORCE_P2P_TYPE_DEFAULT) &&
++    if (!_kp2pFullBar1Override(gpuMask) && (((pKernelBif->forceP2PType != NV_REG_STR_RM_FORCE_P2P_TYPE_DEFAULT) &&
+          (pKernelBif->forceP2PType != NV_REG_STR_RM_FORCE_P2P_TYPE_PCIEP2P))
+         ||
+         ((pKernelBif->pcieP2PType != NV_REG_STR_RM_PCIEP2P_TYPE_BAR1) &&
+-         (pKernelBif->pcieP2PType != NV_REG_STR_RM_PCIEP2P_TYPE_AUTO)))
++         (pKernelBif->pcieP2PType != NV_REG_STR_RM_PCIEP2P_TYPE_AUTO))))
+     {
+         return NV_ERR_NOT_SUPPORTED;
+     }

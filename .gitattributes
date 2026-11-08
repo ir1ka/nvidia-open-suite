@@ -1,0 +1,5 @@
+# Unified-diff context includes a leading space before original tabs/blank lines.
+# Preserve patch content rather than treating these prefixes as source whitespace.
+*.patch -whitespace
+# Preserve the pinned upstream license verbatim, including its trailing blank line.
+licenses/NVIDIA-COPYING -whitespace

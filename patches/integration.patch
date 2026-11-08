@@ -1,0 +1,75 @@
+--- a/kernel-open/nvidia/nv-pci.c
++++ b/kernel-open/nvidia/nv-pci.c
+@@ -348,7 +348,9 @@
+         return;
+ 
+     bar0_start = pci_resource_start(pci_dev, 0);
+-    if (!bar0_start)
++    if (!bar0_start || pci_resource_len(pci_dev, 0) < 0x89000 ||
++        !(pci_resource_flags(pci_dev, 0) & IORESOURCE_MEM) ||
++        (pci_resource_flags(pci_dev, 0) & IORESOURCE_UNSET))
+         return;
+ 
+     pcfg = ioremap(bar0_start + 0x88000, 0x1000);
+@@ -377,7 +379,6 @@
+ 
+     iounmap(pcfg);
+ 
+-    NVreg_EnableResizableBar = 1;
+     nv_printf(NV_DBG_ERRORS,
+         "NVRM: CMP BAR1: resize enabled, will attempt up to 64 GB\n");
+ #endif
+@@ -393,7 +394,8 @@
+     struct pci_host_bridge *host;
+ #endif
+ 
+-    if (NVreg_EnableResizableBar == 0)
++    if (NVreg_EnableResizableBar == 0 &&
++        pci_dev->device != 0x20c2 && pci_dev->device != 0x2082)
+     {
+         nv_printf(NV_DBG_INFO, "NVRM: resizable BAR disabled by regkey, skipping\n");
+         return 0;
+--- a/kernel-open/nvidia/nv.c
++++ b/kernel-open/nvidia/nv.c
+@@ -124,6 +124,7 @@
+ 
+ MODULE_INFO(supported, "external");
+ MODULE_VERSION(NV_VERSION_STRING);
++MODULE_INFO(nvidia_open_suite, "2.0.0");
+ MODULE_INFO(full_bar1_p2p, "1.0.0-explicit-opt-in");
+ MODULE_DESCRIPTION("NVIDIA core GPU kernel module");
+ MODULE_ALIAS_CHARDEV_MAJOR(NV_MAJOR_DEVICE_NUMBER);
+@@ -1380,6 +1381,11 @@
+ 
+     if ((gpu == NULL) ||
+         ((gpu->device != 0x20c2) && (gpu->device != 0x2082)))
++        return;
++
++    if (!pci_resource_start(gpu, 0) || pci_resource_len(gpu, 0) < 0x90000 ||
++        !(pci_resource_flags(gpu, 0) & IORESOURCE_MEM) ||
++        (pci_resource_flags(gpu, 0) & IORESOURCE_UNSET))
+         return;
+ 
+     upstream = pci_upstream_bridge(gpu);
+--- a/src/nvidia/src/kernel/gpu/gsp/kernel_gsp.c
++++ b/src/nvidia/src/kernel/gpu/gsp/kernel_gsp.c
+@@ -5756,6 +5756,10 @@
+     if (!IS_GSP_CLIENT(pGpu))
+         return;
+ 
++    portMemFree(pKernelGsp->pStockSignatureData);
++    pKernelGsp->pStockSignatureData = NULL;
++    pKernelGsp->stockSignatureSize = 0;
++
+     // set VBIOS version string back to "unknown"
+     portStringCopy(pKernelGsp->vbiosVersionStr, sizeof(pKernelGsp->vbiosVersionStr), "unknown", sizeof("unknown"));
+ 
+@@ -6241,6 +6245,8 @@
+ 
+         if (pGspFw->pSignatureData != NULL && pGspFw->signatureSize > 0)
+         {
++            portMemFree(pKernelGsp->pStockSignatureData);
++            pKernelGsp->pStockSignatureData = NULL;
+             pKernelGsp->stockSignatureSize = pGspFw->signatureSize;
+             pKernelGsp->pStockSignatureData = portMemAllocNonPaged(pGspFw->signatureSize);
+             if (pKernelGsp->pStockSignatureData != NULL)

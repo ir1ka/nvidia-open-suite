@@ -1,0 +1,57 @@
+#!/usr/bin/python3
+"""Unified NVIDIA open DKMS patch preparation, installation and diagnostics."""
+import argparse,fcntl,hashlib,importlib.machinery,importlib.util,json,os,re,subprocess,sys
+from pathlib import Path
+# Unprivileged Debian accounts may omit sbin while preparing/status-reading.
+os.environ['PATH']=os.pathsep.join(dict.fromkeys(os.environ.get('PATH','').split(os.pathsep)+['/usr/sbin','/sbin']))
+HERE=Path(__file__).resolve();ROOT=HERE.parents[1]
+if not(ROOT/'manifest.json').is_file():ROOT=Path('/usr/share/nvidia-open-suite/toolkit/nvidia-open-suite')
+REPO=ROOT.parent;META=json.loads((ROOT/'manifest.json').read_text())
+sys.path.insert(0,str(ROOT/'tools'))
+
+def load(name,path):
+    loader=importlib.machinery.SourceFileLoader(name,str(path));spec=importlib.util.spec_from_loader(name,loader)
+    app=importlib.util.module_from_spec(spec);loader.exec_module(app);return app
+
+def p2p_app():
+    component=ROOT/'components/nvidia-bar1-p2p'
+    if not component.is_dir():component=REPO/'nvidia-bar1-p2p'
+    return load('suite_p2p',component/'status.py')
+
+def make_package(a,install=False):
+    import source,package
+    from install import packages
+    plan=source.build_plan(a.driver_version,a.kernel,require_installed=install)
+    versions=package.provide_versions(a.provide_version,packages()if plan['mode']=='installed-driver'else{})
+    work=a.work.resolve()
+    if work==Path('/')or any(work==Path(x)or Path(x)in work.parents for x in ('/etc','/usr','/lib','/boot','/sys','/proc','/dev','/var/lib/dkms')):raise ValueError('Use a separate non-system work directory')
+    provider_source=Path(plan['provider']['source']).resolve()
+    if provider_source==work or provider_source in work.parents:raise ValueError('Work directory must be outside original DKMS source')
+    if install and os.geteuid()!=0:raise ValueError('install requires sudo')
+    work.mkdir(parents=True,mode=0o700,exist_ok=False)
+    (work/'detected-install.json').write_text(json.dumps(plan,indent=2)+'\n')
+    prepared=source.prepare(plan,work,a.source,a.archive)
+    deb=package.build(prepared,work/'packages',versions,**({'firmware_package':a.firmware_package}if getattr(a,'firmware_package',None)else{}))
+    result=dict(plan=plan,prepared_source=str(prepared),package=str(deb),sha256=hashlib.sha256(deb.read_bytes()).hexdigest(),packages=[str(p)for p in sorted(deb.parent.glob('nvidia-open-suite-*.deb'))])
+    (work/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2),flush=True)
+    if install:
+        from install import install as install_package
+        install_package(deb,plan,work)
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)
+    for action in ('prepare','install'):
+        p=sub.add_parser(action);p.add_argument('--work',type=Path,required=True);p.add_argument('--source',type=Path);p.add_argument('--archive',type=Path);p.add_argument('--kernel',help='Installed original DKMS ABI to inspect; defaults to running kernel');p.add_argument('--driver-version',help='Explicit adapted NVIDIA version; prepare does not require host NVIDIA/DKMS detection');p.add_argument('--provide-version',action='append',default=[],metavar='PACKAGE=VERSION',help='Exact target distribution version for a provided NVIDIA kernel package')
+        p.add_argument('--firmware-package',metavar='PACKAGE=VERSION',help='Exact target firmware dependency; default Debian firmware-nvidia-gsp, never inferred from build host')
+    sub.add_parser('status')
+    a=parser.parse_args()
+    if a.action in ('prepare','install'):make_package(a,a.action=='install');return 0
+    if a.action=='status':
+        app=p2p_app();r={'schema':1,'project':'nvidia-open-suite','p2p':app.status(),'cmp_ids':['10de:20c2','10de:2082'],'note':'CMP patches act on supported IDs at next GPU init. Firmware/user-space must match 610.43.02; no hardware success is inferred.'}
+        for field in ('nvidia_open_suite','full_bar1_p2p'):
+            value=subprocess.run(['modinfo','-F',field,'nvidia'],capture_output=True,text=True);r[field]=(value.stdout.strip()or None)if value.returncode==0 else None
+        print(json.dumps(r,indent=2));return 0
+    return 0
+if __name__=='__main__':
+    try:sys.exit(main())
+    except (ValueError,OSError,RuntimeError,subprocess.CalledProcessError)as error:print('nvidia-open-suite: '+str(error),file=sys.stderr);sys.exit(1)

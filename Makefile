@@ -1,0 +1,17 @@
+.PHONY: check
+check:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
+
+.PHONY: check-source
+check-source: check
+	@test -n "$(SOURCE)" || { echo 'Set SOURCE to the prepared suite driver source' >&2; exit 2; }
+	python3 components/nvidia-bar1-p2p/tests/check_driver.py --source "$(SOURCE)"
+	python3 components/nvidia-bar1-p2p/tests/check_registry.py --source "$(SOURCE)"
+	python3 components/nvidia-bar1-p2p/tests/check_lifetime.py --source "$(SOURCE)"
+	python3 components/nvidia-bar1-p2p/tests/check_dynamic.py --source "$(SOURCE)"
+	python3 tests/check_cmp.py --source "$(SOURCE)"
+
+# Run in a disposable root container; synthetic PCI paths only.
+.PHONY: check-gen2
+check-gen2:
+	python3 tests/gen2_runtime.py

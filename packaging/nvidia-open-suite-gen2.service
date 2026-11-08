@@ -1,0 +1,18 @@
+[Unit]
+Description=CMP 170HX early-boot PCIe Gen2 retrain
+DefaultDependencies=no
+After=sysinit.target
+Before=basic.target multi-user.target graphical.target
+ConditionPathExists=/usr/lib/nvidia-open-suite/gen2-hammer
+
+[Service]
+Type=oneshot
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nvidia-open-suite-gen2
+ExecStart=/usr/lib/nvidia-open-suite/gen2-hammer
+TimeoutStartSec=600
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

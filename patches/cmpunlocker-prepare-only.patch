@@ -1,0 +1,46 @@
+--- a/driver/build.sh
++++ b/driver/build.sh
+@@ -11,7 +11,12 @@
+ SRC_DIR="${BUILD_ROOT}/${SRC_NAME}"
+ TARBALL="${BUILD_ROOT}/${SRC_NAME}.tar.gz"
+ TARBALL_URL="https://github.com/NVIDIA/open-gpu-kernel-modules/archive/refs/tags/${VERSION}.tar.gz"
+-KVER="$(uname -r)"
++PREPARE_ONLY="${CMPUNLOCKER_PREPARE_ONLY:-0}"
++if [[ "${PREPARE_ONLY}" == 1 ]]; then
++    KVER="source-preparation"
++else
++    KVER="$(uname -r)"
++fi
+ KSRC="/lib/modules/${KVER}/build"
+ INSTALL_MOD_DIR="/lib/modules/${KVER}/updates/cmpunlocker"
+ 
+@@ -35,11 +40,15 @@
+     return 1
+ }
+ 
+-[[ "${EUID}" -eq 0 ]] || die "Run as root: sudo ${SCRIPT_DIR}/build.sh"
++if [[ "${PREPARE_ONLY}" != 1 ]]; then
++    [[ "${EUID}" -eq 0 ]] || die "Run as root: sudo ${SCRIPT_DIR}/build.sh"
++fi
+ [[ -n "${VERSION}" ]] || die "No driver version set (driver/VERSION empty and CMPUNLOCKER_DRIVER_VERSION unset)"
+ version_supported "${VERSION}" || die "Unsupported driver version '${VERSION}' (supported: ${SUPPORTED_VERSIONS[*]})"
+ [[ -d "${PATCH_DIR}" ]] || die "Missing patches directory: ${PATCH_DIR}"
+-[[ -d "${KSRC}" ]] || die "Kernel headers not found at ${KSRC}. Install linux-headers-${KVER} (or kernel-devel)."
++if [[ "${PREPARE_ONLY}" != 1 ]]; then
++    [[ -d "${KSRC}" ]] || die "Kernel headers not found at ${KSRC}. Install linux-headers-${KVER} (or kernel-devel)."
++fi
+ command -v python3 &>/dev/null || die "python3 is required to apply the card memory profile"
+ python3 -c "import yaml" 2>/dev/null || die "python3 PyYAML is required to read common/constants.yaml (apt install python3-yaml)"
+ command -v sha256sum &>/dev/null || die "sha256sum is required"
+@@ -171,6 +180,11 @@
+     printf '%s\n' "${BUILD_STAMP}" > "${STAMP_FILE}"
+ fi
+ 
++if [[ "${PREPARE_ONLY}" == 1 ]]; then
++    ok "Source preparation complete; compilation and installation delegated to DKMS"
++    exit 0
++fi
++
+ cd "${SRC_DIR}"
+ mkdir -p "${INSTALL_MOD_DIR}"
+ printf '%s\n' "${VERSION}" > "${INSTALL_MOD_DIR}/driver_version"
