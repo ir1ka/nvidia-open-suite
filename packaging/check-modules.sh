@@ -4,7 +4,7 @@ set -euo pipefail
 kernel=${1:?explicit kernel ABI required}
 for name in nvidia nvidia-modeset nvidia-drm nvidia-uvm nvidia-peermem;do
  file=kernel-open/$name.ko
- [ "$(modinfo -F version "$file")" = 610.43.02 ] || { echo "Wrong NVIDIA version: $file" >&2;exit 1; }
+ [ "$(modinfo -F version "$file")" = @DRIVER_VERSION@ ] || { echo "Wrong NVIDIA version: $file" >&2;exit 1; }
  [ "$(modinfo -F vermagic "$file" | cut -d ' ' -f1)" = "$kernel" ] || { echo "Wrong kernel ABI: $file" >&2;exit 1; }
 done
 [ "$(modinfo -F nvidia_open_suite kernel-open/nvidia.ko)" = 2.1.0 ] || { echo 'Suite marker missing' >&2;exit 1; }

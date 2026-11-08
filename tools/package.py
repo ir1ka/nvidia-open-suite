@@ -2,9 +2,9 @@
 """Source-bearing five-module DKMS Debian package; no host registration."""
 import json,os,re,shutil,subprocess,tempfile
 from pathlib import Path
-from source import ROOT,REPO,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files,require_supported
+from source import ROOT,REPO,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files,require_supported,driver_registry
 NAME='nvidia-open-suite-dkms'
-STOCK=('nvidia-kernel-dkms','nvidia-open-kernel-dkms','nvidia-kernel-open-dkms','nvidia-dkms-610','nvidia-dkms-610-open')
+STOCK=('nvidia-kernel-dkms','nvidia-open-kernel-dkms','nvidia-kernel-open-dkms','nvidia-dkms-'+DRIVER.split('.')[0],'nvidia-dkms-'+DRIVER.split('.')[0]+'-open')
 CONFLICTS=(*STOCK,'nvidia-bar1-p2p-dkms','nvidia-bar1-p2p-prebuilt')
 
 def validate_provides(versions):
@@ -34,7 +34,7 @@ def firmware_dependency(spec=None, versions=None):
     if spec is None:
         if versions and not set(versions)&{'nvidia-kernel-open-dkms','nvidia-open-kernel-dkms','nvidia-kernel-dkms'}:
             raise ValueError('Non-Debian target metadata requires explicit --firmware-package PACKAGE=VERSION')
-        spec='firmware-nvidia-gsp='+((versions or {}).get('nvidia-kernel-open-dkms',DRIVER+'-1'))
+        spec='firmware-nvidia-gsp='+((versions or {}).get('nvidia-kernel-open-dkms',DRIVER+'-'+driver_registry.profile()['distribution_revision']))
     name,sep,version=spec.partition('=')
     if not sep or not re.fullmatch(r'[a-z0-9][a-z0-9+.-]+',name):
         raise ValueError('Use --firmware-package PACKAGE=VERSION')
@@ -58,6 +58,7 @@ def build(source,output,provides_versions=None,firmware_package=None):
     require_supported(DRIVER)
     meta=json.loads((source/'nvidia-suite-source.json').read_text())
     require_supported(meta['detected_install']['driver_version'])
+    if meta.get('driver_registry_sha256')!=digest(ROOT/'supported-drivers.json'):raise ValueError('Prepared driver registry changed; prepare source again')
     if meta['suite_version']!=RELEASE or meta['suite_manifest_sha256']!=digest(ROOT/'manifest.json'):raise ValueError('Source suite manifest mismatch')
     if tree_files(source)!=meta['prepared_files']:raise ValueError('Prepared source changed since validation')
     # Revision precedes the source hash, so source changes cannot downgrade APT.

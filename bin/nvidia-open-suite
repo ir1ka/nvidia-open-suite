@@ -47,7 +47,7 @@ def main():
     a=parser.parse_args()
     if a.action in ('prepare','install'):make_package(a,a.action=='install');return 0
     if a.action=='status':
-        app=p2p_app();r={'schema':1,'project':'nvidia-open-suite','p2p':app.status(),'cmp_ids':['10de:20c2','10de:2082'],'note':'CMP patches act on supported IDs at next GPU init. Firmware/user-space must match 610.43.02; no hardware success is inferred.'}
+        app=p2p_app();r={'schema':1,'project':'nvidia-open-suite','p2p':app.status(),'cmp_ids':['10de:20c2','10de:2082'],'note':'CMP patches act on supported IDs at next GPU init. Firmware/user-space must match the selected supported driver version; no hardware success is inferred.'}
         for field in ('nvidia_open_suite','full_bar1_p2p'):
             value=subprocess.run(['modinfo','-F',field,'nvidia'],capture_output=True,text=True);r[field]=(value.stdout.strip()or None)if value.returncode==0 else None
         print(json.dumps(r,indent=2));return 0

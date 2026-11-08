@@ -115,4 +115,30 @@ class SupportedDrivers(unittest.TestCase):
   self.assertTrue(source.VERSION.startswith(source.RELEASE+'+nvidia.'))
   new='1:'+source.VERSION+'.pkg1.local.abcdef-1'
   subprocess.run(['dpkg','--compare-versions',new,'gt','610.43.02+suite.2.0.0.pkg14.local.abcdef-14'],check=True)
-  self.assertIn('PACKAGE_VERSION="'+source.VERSION+'"',(ROOT/'packaging/dkms.conf').read_text())
+  with tempfile.TemporaryDirectory() as tmp:
+   stage=Path(tmp);source.finalize(stage)
+   self.assertIn('PACKAGE_VERSION="'+source.VERSION+'"',(stage/'dkms.conf').read_text())
+   self.assertNotIn('@DRIVER_VERSION@',(stage/'check-modules.sh').read_text())
+   self.assertIn(source.DRIVER,(stage/'check-modules.sh').read_text())
+
+class CentralDriverMetadata(unittest.TestCase):
+ def test_no_duplicate_production_version(self):
+  self.assertNotIn('driver_version',source.META)
+  self.assertFalse((source.BAR1/'vendor.json').exists())
+  for directory in ('tools','packaging','bin'):
+   for path in (ROOT/directory).rglob('*'):
+    if path.is_file() and '__pycache__' not in path.parts:
+     self.assertNotIn(source.DRIVER,path.read_text(),str(path))
+ def test_registry_is_shared_by_component_and_cmp(self):
+  import cmp_prepare
+  entry=source.require_supported(source.DRIVER)
+  self.assertEqual(source.base.VENDOR,entry['source'])
+  self.assertEqual(cmp_prepare.verify()[0]['driver_version'],entry['driver_version'])
+ def test_template_output_uses_selected_metadata(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   stage=Path(tmp)
+   with patch.object(source,'DRIVER','999.12.34'),patch.object(source,'VERSION','9.0+nvidia.999.12.34'):
+    source.finalize(stage)
+   self.assertIn('PACKAGE_VERSION="9.0+nvidia.999.12.34"',(stage/'dkms.conf').read_text())
+   self.assertIn('999.12.34',(stage/'check-modules.sh').read_text())
+   self.assertNotIn('@DRIVER_VERSION@',(stage/'check-modules.sh').read_text())

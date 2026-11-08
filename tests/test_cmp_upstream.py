@@ -11,7 +11,7 @@ class Upstream(unittest.TestCase):
   self.assertEqual(set(meta['patch_order']),{p.name for p in (upstream/'driver/patches').glob('*.patch')})
  def test_tampered_config_or_script_is_refused(self):
   with tempfile.TemporaryDirectory()as tmp:
-   root=Path(tmp);shutil.copytree(ROOT/'vendor',root/'vendor');shutil.copytree(ROOT/'patches',root/'patches');shutil.copy2(ROOT/'manifest.json',root/'manifest.json')
+   root=Path(tmp);shutil.copytree(ROOT/'vendor',root/'vendor');shutil.copytree(ROOT/'patches',root/'patches');shutil.copy2(ROOT/'manifest.json',root/'manifest.json');shutil.copy2(ROOT/'supported-drivers.json',root/'supported-drivers.json')
    p=root/'vendor/cmpunlocker/common/constants.yaml';p.write_text(p.read_text()+'\n# tampered\n')
    with self.assertRaisesRegex(ValueError,'inventory changed'):cmp_prepare.verify(root)
  def test_original_constants_validator_for_every_profile(self):
@@ -49,7 +49,7 @@ class Upstream(unittest.TestCase):
 
  def test_missing_submodule_has_actionable_error(self):
   with tempfile.TemporaryDirectory()as tmp:
-   root=Path(tmp);shutil.copy2(ROOT/'manifest.json',root/'manifest.json')
+   root=Path(tmp);shutil.copy2(ROOT/'manifest.json',root/'manifest.json');shutil.copy2(ROOT/'supported-drivers.json',root/'supported-drivers.json')
    with self.assertRaisesRegex(ValueError,'git submodule update --init --recursive'):
     cmp_prepare.verify(root)
  def test_exported_toolkit_has_upstream_files_without_git_metadata(self):
