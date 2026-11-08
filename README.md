@@ -186,19 +186,19 @@ Historical container recipes tied to old delivery artifacts and fixed kernel ABI
 
 ## PCIe P2P measurements
 
-Measured on 2026-11-08 on **Debian 13**, kernel `6.12.115+deb13.1-amd64`, Suite 2.1.0 / NVIDIA 610.43.02, with two A100 PCIe 40 GB cards (64 GiB BAR1, PCIe Gen4 x16) and two modified 22 GB RTX 2080 Ti cards (256 MiB BAR1, PCIe Gen3 x16) behind PEX 88096. These are observations on this host, not guarantees for other cards or platforms.
+Suite measurements were taken on 2026-11-08 and CUDA Samples v13.3 was retested on 2026-11-09 on **Debian 13**, kernel `6.12.115+deb13.1-amd64`, Suite 2.1.0 / NVIDIA 610.43.02, with two A100 PCIe 40 GB cards (64 GiB BAR1, PCIe Gen4 x16) and two modified 22 GB RTX 2080 Ti cards (256 MiB BAR1, PCIe Gen3 x16) behind PEX 88096. These are observations on this host, not guarantees for other cards or platforms.
 
 The host was idle before testing. NVLink was temporarily disabled and dynamic BAR1 P2P enabled; A100 used full BAR1 and RTX used dynamic mappings. ACS and BAR sizes were not changed. After testing, default parameters and nvidia-persistenced were restored: Suite stayed loaded, NVLink enabled, dynamic BAR1 disabled. Cross-model A100↔2080 Ti CUDA P2P remains unsupported.
 
-**The two latency measurements have different meanings.** NVIDIA [CUDA Samples v12.8 p2pBandwidthLatencyTest](https://github.com/NVIDIA/cuda-samples/blob/v12.8/Samples/5_Domain_Specific/p2pBandwidthLatencyTest/p2pBandwidthLatencyTest.cu) measures 100 queued 16-byte copies with CUDA Events and reports average GPU copy latency; its separate CPU matrix measures submission time. Our latency test measures GPU-resident ping-pong RTT, dependent remote loads, and stores/system fences. RTT/2 is not a measured one-way delay.
+**The two latency measurements have different meanings.** NVIDIA [CUDA Samples v13.3 p2pBandwidthLatencyTest](https://github.com/NVIDIA/cuda-samples/blob/v13.3/cpp/5_Domain_Specific/p2pBandwidthLatencyTest/p2pBandwidthLatencyTest.cu) measures 100 queued 16-byte copies with CUDA Events and reports average GPU copy latency. Our latency test measures GPU-resident ping-pong RTT, dependent remote loads, and stores/system fences. RTT/2 is not a measured one-way delay.
 
 | Test / metric | A100 pair | RTX 2080 Ti pair |
 |---|---:|---:|
-| CUDA Samples CE write bandwidth, GB/s | 18.95–18.99 | 13.16 |
-| CUDA Samples bidirectional aggregate, GB/s | 37.81–37.88 | 25.91 |
-| CUDA Samples CE read bandwidth, GB/s | 20.01–20.06 | 13.125–13.13 |
-| CUDA Samples GPU write-copy latency, µs | 2.170 / 2.710 | 1.425 / 1.525 |
-| CUDA Samples GPU read-copy latency, µs | 14.195 / 13.610 | 5.960 / 5.865 |
+| CUDA Samples CE write bandwidth, GB/s | 19.54–19.55 | 13.16 |
+| CUDA Samples bidirectional aggregate, GB/s | 38.22–39.00 | 25.90–25.91 |
+| CUDA Samples CE read bandwidth, GB/s | 22.29–22.33 | 13.13 |
+| CUDA Samples GPU write-copy latency, µs | 2.530 / 2.460 | 1.500 / 1.425 |
+| CUDA Samples GPU read-copy latency, µs | 13.670 / 13.525 | 5.910 / 5.970 |
 | Suite CE copy bandwidth, GB/s | 25.69 | 13.33 |
 | Suite bidirectional CE aggregate, GB/s | 43.69 | 22.94 |
 | Suite ping-pong RTT P50 / P95 / P99, µs | 2.402 / 2.930 / 2.998 | 1.676 / 2.064 / 2.125 |
@@ -206,7 +206,7 @@ The host was idle before testing. NVLink was temporarily disabled and dynamic BA
 | Suite remote store + system fence P50 / P95 / P99, µs | 2.272 / 2.735 / 2.804 | 1.571 / 1.601 / 2.110 |
 | Suite empty system fence P50 / P95 / P99, µs | 2.197 / 2.269 / 2.336 | 1.504 / 1.756 / 1.818 |
 
-Samples was built **without modifying its source**, using the default copy engine and `--numElems=8388608` (32 MiB). `--p2p_read` adds the read matrices; its bidirectional test is unchanged. Ten alternating pair rounds were run in each mode; the first two were discarded. Samples entries above are medians across eight runs per off-diagonal matrix cell; slash-separated copy latencies retain the two cells separately. A100 write bandwidth varied from **15.96 to 26.28 GB/s**, and bidirectional bandwidth from **31.86 to 51.53 GB/s**; RTX ranges were 13.16–13.17 and 25.89–25.93 GB/s. No clocks were locked. Samples uses five transfers per batch and warns that GPU Boost affects results; its medians are not peak-throughput claims.
+Samples v13.3 (commit `b7c5481c556c3fe98db060207ecaa41a4b9a9abc`) was built with CUDA toolkit 13.3.73 **without modifying its source**, using the default copy engine and `--numElems=8388608` (32 MiB). `--p2p_read` adds the read matrices; its bidirectional test is unchanged. Ten alternating pair rounds were run in each mode; the first two were discarded. Samples entries above are medians across eight runs per off-diagonal matrix cell; slash-separated copy latencies retain the two cells separately. A100 write bandwidth varied from **15.97 to 26.29 GB/s**, and bidirectional bandwidth from **31.89 to 51.53 GB/s**; RTX ranges were 13.16–13.17 and 25.89–25.92 GB/s. No clocks were locked. Samples uses five transfers per batch and warns that GPU Boost affects results; its medians are not peak-throughput claims.
 
 Suite bandwidth used 32 MiB × 64 transfers, measured in the preceding validation session: unidirectional CUDA Events around `cudaMemcpyAsync(cudaMemcpyDefault)`, and bidirectional host wall time including submission/synchronization. It is not a matched statistical comparison with Samples, whose queued execution is gated by a delay kernel and timed with GPU events. Both tests confirmed P2P access; the sample's disabled-P2P and diagonal matrices are excluded from the table.
 
