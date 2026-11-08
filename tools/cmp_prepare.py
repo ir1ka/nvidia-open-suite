@@ -18,7 +18,10 @@ def verify(root=ROOT):
     return meta,upstream
 
 def adapt_recipe(destination,root=ROOT):
-    meta,upstream=verify(root)
+    _,upstream=verify(root)
+    return _adapt_recipe(destination,upstream,root)
+
+def _adapt_recipe(destination,upstream,root):
     shutil.copytree(upstream,destination,ignore=shutil.ignore_patterns('.git','__pycache__','*.pyc'))
     subprocess.run(['patch','--batch','--fuzz=0','--forward','-p1','-i',str((root/'patches/cmpunlocker-prepare-only.patch').resolve())],cwd=destination,check=True,capture_output=True,text=True)
     return destination/'driver/build.sh'
@@ -28,7 +31,7 @@ def prepare(stage,profile='mixed',root=ROOT):
     if profile not in ('mixed','8gb','10gb'):raise ValueError('Unknown CMP profile')
     # Every path the original script may extract/remove is private to this call.
     with tempfile.TemporaryDirectory(prefix='.cmp-upstream-',dir=stage.parent)as tmp:
-        work=Path(tmp);recipe=work/'recipe';script=adapt_recipe(recipe,root)
+        work=Path(tmp);recipe=work/'recipe';script=_adapt_recipe(recipe,upstream,root)
         build=work/'build';build.mkdir();name='open-gpu-kernel-modules-'+meta['driver_version'];output=build/name
         # Supply the caller's validated source, never download or touch /usr/src.
         archive=build/(name+'.tar.gz')

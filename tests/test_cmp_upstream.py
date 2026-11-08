@@ -63,3 +63,11 @@ class Upstream(unittest.TestCase):
    script=cmp_prepare.adapt_recipe(Path(tmp)/'recipe',exported)
    self.assertTrue(script.is_file())
    self.assertFalse((script.parents[1]/'.git').exists())
+
+ def test_preparation_verifies_recipe_once(self):
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as tmp:
+   stage=Path(tmp)/'stage';stage.mkdir()
+   with patch.object(cmp_prepare,'verify',wraps=cmp_prepare.verify) as verify,patch.object(cmp_prepare,'_adapt_recipe',side_effect=RuntimeError('stop before execution')):
+    with self.assertRaisesRegex(RuntimeError,'stop before execution'):cmp_prepare.prepare(stage)
+   verify.assert_called_once_with(cmp_prepare.ROOT)

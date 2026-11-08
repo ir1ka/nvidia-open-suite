@@ -5,12 +5,13 @@
 set -euo pipefail
 : "${TARGET_KERNEL:?explicit target ABI required}"
 : "${TARGET_HEADERS:?explicit target headers required}"
-: "${SOURCE_ARCHIVE:?pinned official NVIDIA source archive required}"
+: "${SOURCE_ARCHIVE:?NVIDIA source archive required}"
 : "${PROVIDE_VERSION:?target NVIDIA DKMS package=version required}"
 : "${FIRMWARE_PACKAGE:?target GSP package=version required}"
 export PYTHONDONTWRITEBYTECODE=1
 cd /source
-./bin/nvidia-open-suite prepare --driver-version 610.43.02 \
+driver_version=${DRIVER_VERSION:-$(python3 -c 'import sys;sys.path.insert(0,"tools");import driver_registry;print(driver_registry.profile()["driver_version"])')}
+./bin/nvidia-open-suite prepare --driver-version "$driver_version" \
     --archive "$SOURCE_ARCHIVE" --provide-version "$PROVIDE_VERSION" \
     --firmware-package "$FIRMWARE_PACKAGE" --work /out/prepared > /out/prepare.log 2>&1
 prepared=$(python3 -c 'import json; print(json.load(open("/out/prepared/result.json"))["prepared_source"])')

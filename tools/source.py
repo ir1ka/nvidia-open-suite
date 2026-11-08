@@ -27,7 +27,7 @@ def tool(name):
     raise ValueError('Required tool missing: '+name)
 
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
-def tree_files(path):return {str(p.relative_to(path)):digest(p)for p in sorted(path.rglob('*'))if p.is_file()and p.name!='nvidia-suite-source.json'}
+def tree_files(path):return base.manifest(path)
 
 def dkms_records(text):
     records=[]
@@ -103,7 +103,7 @@ def acquire(plan,work,source=None,archive=None):
 def finalize(stage):
     if not(stage/'COPYING').exists():shutil.copyfile(ROOT/'licenses/NVIDIA-COPYING',stage/'COPYING')
     for name in ('dkms.conf','suite-build.sh','check-modules.sh'):
-        text=(ROOT/'packaging'/name).read_text().replace('@DKMS_VERSION@',VERSION).replace('@DRIVER_VERSION@',DRIVER)
+        text=(ROOT/'packaging'/name).read_text().replace('@DKMS_VERSION@',VERSION).replace('@DRIVER_VERSION@',DRIVER).replace('@SUITE_VERSION@',RELEASE)
         (stage/name).write_text(text)
     (stage/'suite-build.sh').chmod(0o755)
     (stage/'check-modules.sh').chmod(0o755)
@@ -116,7 +116,6 @@ def prepare(plan,work,source=None,archive=None):
         if digest(path)!=META[key]:raise ValueError('Suite input hash mismatch: '+key)
     original,origin=acquire(plan,work,source,archive)
     import cmp_prepare
-    cmp_prepare.verify(ROOT)
     chain=[BAR1/'patches/full-bar1-p2p.patch',ROOT/'patches/integration.patch',BAR1/'patches/dynamic-bar1-p2p.patch']
     path=base.prepare_local(original,work/'patched-source',patch_paths=chain,finalize=finalize,
         metadata_name='nvidia-suite-source.json',prepare_hook=lambda stage:cmp_prepare.prepare(stage,root=ROOT))

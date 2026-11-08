@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 """Source-bearing five-module DKMS Debian package; no host registration."""
+from email.utils import formatdate
 import json,os,re,shutil,subprocess,tempfile
 from pathlib import Path
-from source import ROOT,REPO,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files,require_supported,driver_registry
+from source import ROOT,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files,require_supported,driver_registry
 NAME='nvidia-open-suite-dkms'
 STOCK=('nvidia-kernel-dkms','nvidia-open-kernel-dkms','nvidia-kernel-open-dkms','nvidia-dkms-'+DRIVER.split('.')[0],'nvidia-dkms-'+DRIVER.split('.')[0]+'-open')
 CONFLICTS=(*STOCK,'nvidia-bar1-p2p-dkms','nvidia-bar1-p2p-prebuilt')
@@ -65,6 +66,8 @@ def build(source,output,provides_versions=None,firmware_package=None):
     version='1:'+VERSION+'.pkg'+str(META['package_revision'])+'.local.'+meta['original_tree_sha256'][:12]+'-'+str(META['package_revision'])
     versions=validate_provides(provides_versions or {})
     firmware=firmware_dependency(firmware_package,versions)
+    epoch=int(driver_registry.profile()['source']['source_date_epoch'])
+    changelog_date=formatdate(epoch,localtime=False)
     output.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='nvidia-suite-deb-')as tmp:
         root=Path(tmp)/'source';debian=root/'debian';debian.mkdir(parents=True)
@@ -125,13 +128,13 @@ Description: Optional preparation and test tools for NVIDIA Open Suite
         shutil.copyfile(source/'dkms.conf',debian/(NAME+'.dkms'))
         (debian/'changelog').write_text(f"""nvidia-open-suite ({version}) unstable; urgency=medium
 
-  * Split optional tools; use standard dh_dkms lifecycle.
+  * Build Suite {RELEASE} for NVIDIA open {DRIVER}.
 
- -- IriKa Qiu <qiujie.jq@gmail.com>  Tue, 03 Nov 2026 00:00:00 +0000
+ -- IriKa Qiu <qiujie.jq@gmail.com>  {changelog_date}
 """)
         (debian/'rules').write_text("#!/usr/bin/make -f\n%:\n\tdh $@ --with dkms\n\noverride_dh_installsystemd:\n\tdh_installsystemd --no-start\n\noverride_dh_auto_configure:\noverride_dh_auto_build:\noverride_dh_auto_test:\noverride_dh_auto_install:\n\tcp -a payload/main/. debian/nvidia-open-suite-dkms/\n\tcp -a payload/tools/. debian/nvidia-open-suite-tools/\n")
         (debian/'rules').chmod(0o755)
         subprocess.run(['dpkg-buildpackage','-b','-us','-uc','-d'],cwd=root,check=True,
-                       env=dict(os.environ,SOURCE_DATE_EPOCH='1793664000'))
+                       env=dict(os.environ,SOURCE_DATE_EPOCH=str(epoch)))
         for artifact in root.parent.glob('*.deb'):shutil.copy2(artifact,output/artifact.name)
         return output/(NAME+'_'+version.split(':',1)[-1]+'_amd64.deb')

@@ -2,11 +2,10 @@
 """Explicit DKMS-provider takeover. Never stop services or reload modules."""
 import fcntl,json,os,subprocess
 from pathlib import Path
-from source import VERSION,DRIVER,dkms_records
+from source import DRIVER,dkms_records
 INSTALL_LOCK=Path('/run/lock/nvidia-open-suite-install.lock')
 MODULES_ROOT=Path('/lib/modules')
-DKMS_ROOT=Path('/var/lib/dkms')
-from package import STOCK,CONFLICTS
+from package import CONFLICTS
 
 def run(args,**kw):return subprocess.run(list(map(str,args)),check=True,**kw)
 def packages():
@@ -38,7 +37,8 @@ def install(deb,plan,work):
         installed_packages=packages()
         owned=subprocess.run(['dpkg-query','-S',str(Path(original['source'])/'dkms.conf')],capture_output=True,text=True)
         owners={name.strip().split(':')[0]for name in owned.stdout.split(': ',1)[0].split(',')}if owned.returncode==0 else set()
-        source_only={'nvidia-kernel-source-610','nvidia-kernel-source-610-open'}
+        source_package='nvidia-kernel-source-'+DRIVER.split('.')[0]
+        source_only={source_package,source_package+'-open'}
         unknown=owners-set(CONFLICTS)-source_only-{'nvidia-open-suite-dkms'}
         if unknown:raise ValueError('Unadapted original source package owner; review takeover before proceeding: '+', '.join(sorted(unknown)))
 
