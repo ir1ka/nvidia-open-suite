@@ -107,7 +107,7 @@ class SupportedDrivers(unittest.TestCase):
     acquire.assert_not_called()
  def test_unreviewed_profile_is_not_enabled_by_listing(self):
   with tempfile.TemporaryDirectory() as tmp:
-   root=Path(tmp);(root/'supported-drivers.json').write_text(json.dumps({'schema_version':1,'drivers':{'610.43.03':{'status':'supported','manifest':'manifest.json','source':'components/nvidia-bar1-p2p/vendor.json'}}}))
+   root=Path(tmp);(root/'supported-drivers.json').write_text(json.dumps({'schema_version':1,'drivers':{'610.43.03':{'status':'supported','manifest':'manifest.json','source':{}}}}))
    with patch.object(source,'ROOT',root):
     with self.assertRaisesRegex(ValueError,'profile mismatch'):source.build_plan('610.43.03')
  def test_suite_version_and_upgrade_order(self):

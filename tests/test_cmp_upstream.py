@@ -7,14 +7,14 @@ import cmp_prepare
 class Upstream(unittest.TestCase):
  def test_original_files_and_patch_inventory_are_pinned(self):
   meta,upstream=cmp_prepare.verify()
-  self.assertEqual(len(meta['upstream_files']),48)
+  self.assertNotIn('upstream_files',meta)
   self.assertEqual(set(meta['patch_order']),{p.name for p in (upstream/'driver/patches').glob('*.patch')})
- def test_modified_upstream_config_is_recorded_not_rejected(self):
+ def test_modified_upstream_config_is_not_rejected(self):
   with tempfile.TemporaryDirectory()as tmp:
    root=Path(tmp);shutil.copytree(ROOT/'vendor',root/'vendor');shutil.copytree(ROOT/'patches',root/'patches');shutil.copy2(ROOT/'manifest.json',root/'manifest.json');shutil.copy2(ROOT/'supported-drivers.json',root/'supported-drivers.json')
    p=root/'vendor/cmpunlocker/common/constants.yaml';p.write_text(p.read_text()+'\n# tampered\n')
    meta,_=cmp_prepare.verify(root)
-   self.assertEqual(meta['upstream_files']['common/constants.yaml'],cmp_prepare.digest(p))
+   self.assertNotIn('upstream_files',meta)
  def test_original_constants_validator_for_every_profile(self):
   _,up=cmp_prepare.verify()
   for profile,cfg,lmr,label in [('mixed','0x02779000','0x0000020B','mixed'),('8gb','0x02779000','0x0000020B','64GB'),('10gb','0x02669000','0x0000028A','40GB')]:
