@@ -67,13 +67,14 @@ perform driver unload/reload automatically.
 
 ## NVIDIA CUDA Samples
 
-Use the unmodified v12.8 release and its Common headers; do not copy upstream
+Use the unmodified v13.3 release (commit `b7c5481c556c3fe98db060207ecaa41a4b9a9abc`)
+and its Common headers. The recorded run used CUDA toolkit 13.3.73. Do not copy upstream
 source or binaries into this repository or a deb. For example, after extracting
-the official tag archive into `/path/to/cuda-samples-12.8`:
+the official tag archive into `/path/to/cuda-samples-13.3`:
 
 ```sh
-nvcc -O2 -arch=sm_75 -I/path/to/cuda-samples-12.8/Common \
-  /path/to/cuda-samples-12.8/Samples/5_Domain_Specific/p2pBandwidthLatencyTest/p2pBandwidthLatencyTest.cu \
+nvcc -O2 -arch=sm_75 -I/path/to/cuda-samples-13.3/Common \
+  /path/to/cuda-samples-13.3/cpp/5_Domain_Specific/p2pBandwidthLatencyTest/p2pBandwidthLatencyTest.cu \
   -o build/hardware/p2pBandwidthLatencyTest
 CUDA_VISIBLE_DEVICES=GPU-uuid-a,GPU-uuid-b \
   build/hardware/p2pBandwidthLatencyTest --numElems=8388608
