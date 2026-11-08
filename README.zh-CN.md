@@ -46,12 +46,13 @@ sudo apt install /var/tmp/nvidia-suite-build-01/packages/nvidia-open-suite-dkms_
 ```bash
 ./bin/nvidia-open-suite prepare --driver-version 610.43.02 \
   --provide-version nvidia-kernel-open-dkms=610.43.02-1 \
+  --firmware-package firmware-nvidia-gsp=610.43.02-1 \
   --work /var/tmp/nvidia-suite-build-02
 ```
 
-`--firmware-package PACKAGE=VERSION` 指定目标系统的精确 GSP 固件依赖；默认是 Debian 的 `firmware-nvidia-gsp`，非 Debian 目标必须显式指定。
+默认本机构建通过 `dpkg-query` 分别读取已安装的 `nvidia-kernel-open-dkms` 和 `firmware-nvidia-gsp` 的完整版本（含 epoch、发行版修订号），不要求两者相同。显式参数优先。使用 `--driver-version` 跨系统构建时，必须同时指定 `--provide-version nvidia-kernel-open-dkms=VERSION` 和 `--firmware-package PACKAGE=VERSION`，不会读取构建机包版本。原包未安装（包括已被 Suite 替代）时须显式指定，不能猜测版本。
 
-`--provide-version` 请使用目标发行版的原包版本，可重复指定不同的已知 NVIDIA 内核包名。
+`--provide-version` 仅接受当前替代目标 `nvidia-kernel-open-dkms` 的完整版本。
 
 ### 驱动源码获取
 
@@ -140,7 +141,7 @@ sudo apt install ./nvidia-open-suite-dkms_*.deb
 sudo apt install ./nvidia-open-suite-tools_*.deb
 ```
 
-主包使用 debhelper compat 13、`dh_dkms` 与标准 DKMS 公共维护脚本。依赖匹配版本的 firmware-nvidia-gsp 和 g++；dkms 最低版本由 dh_dkms 的 misc:Depends 自动生成，并提供 `nvidia-kernel-610.43.02` 能力名。默认固件包版本取 `--provide-version nvidia-kernel-open-dkms=VERSION`，未指定时为 610.43.02-1；不同仓库的修订号必须按目标发行版指定。不再自行循环所有 headers 目录，具体内核选择、失败和签名行为遵循目标系统 DKMS；归属不明的原提供者拒绝自动接管。
+主包使用 debhelper compat 13、`dh_dkms` 与标准 DKMS 维护脚本。GSP 固件独立精确依赖，不再从 DKMS 版本推导。`Provides` 仅包含版本化的 `nvidia-kernel-open-dkms`；不再宣称其他发行版别名或未使用的 `nvidia-kernel-VERSION` 能力。`Replaces` 仅包含被替代的原包。`Conflicts` 仍阻止闭源、其他 NVIDIA DKMS 提供者及旧 BAR1 P2P 包同时安装，因为它们安装相同的内核模块名；不表示 Suite 提供或替代这些包。工具包保留针对旧 Suite 主包的版本化 `Breaks`/`Replaces`，用于迁移拆包前的工具文件。内核选择和签名遵循系统 DKMS。
 
 
 ## 动态 BAR1 P2P（可选；RTX 30/40 系列为预览功能）

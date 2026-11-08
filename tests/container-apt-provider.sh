@@ -79,11 +79,12 @@ dkms remove -m nvidia -v 610.43.02 --all
 EOF2
 chmod 755 /work/package-nvidia-kernel-open-dkms/DEBIAN/{postinst,prerm}
 fixture test-nvidia-meta 1 'Depends: nvidia-kernel-open-dkms (= 610.43.02-1)'
+fixture nvidia-open 610.43.02-1 $'Depends: test-nvidia-meta, nvidia-kernel-open-dkms (>= 610.43.02)\nConflicts: nvidia-kernel-dkms'
 fixture unrelated-service-fixture 1 ''
-for name in nvidia-kernel-open-dkms test-nvidia-meta unrelated-service-fixture;do
+for name in nvidia-kernel-open-dkms test-nvidia-meta nvidia-open unrelated-service-fixture;do
  dpkg-deb --build /work/package-"$name" /work/"$name".deb >/dev/null
 done
-dpkg -i /work/nvidia-kernel-open-dkms.deb /work/test-nvidia-meta.deb /work/unrelated-service-fixture.deb > "$OUT/fixture-install.log"
+dpkg -i /work/nvidia-kernel-open-dkms.deb /work/test-nvidia-meta.deb /work/nvidia-open.deb /work/unrelated-service-fixture.deb > "$OUT/fixture-install.log"
 # Show why upstream-only versioned Provides is insufficient for exact distro dependencies.
 fixture wrong-provides-fixture 1 $'Provides: nvidia-kernel-open-dkms (= 610.43.02)\nConflicts: nvidia-kernel-open-dkms'
 dpkg-deb --build /work/package-wrong-provides-fixture /work/wrong-provides.deb >/dev/null
@@ -93,6 +94,7 @@ apt-get -s install "$DEB_PATH" > "$OUT/apt-simulation.log"
 ! grep -q '^Remv test-nvidia-meta ' "$OUT/apt-simulation.log"
 apt-get --yes install "$DEB_PATH" > "$OUT/apt-install.log" 2>&1
 [ "$(dpkg-query -W -f='${Status}' test-nvidia-meta)" = 'install ok installed' ]
+[ "$(dpkg-query -W -f='${Status}' nvidia-open)" = 'install ok installed' ]
 [ "$(dpkg-query -W -f='${Status}' unrelated-service-fixture)" = 'install ok installed' ]
 [ "$(dpkg-query -W -f='${Status}' nvidia-open-suite-dkms)" = 'install ok installed' ]
 ! dpkg-query -W -f='${Status}' nvidia-kernel-open-dkms 2>/dev/null | grep -q 'install ok installed'

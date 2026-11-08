@@ -40,7 +40,7 @@ class Selection(unittest.TestCase):
   loader=importlib.machinery.SourceFileLoader('selection_cli',str(ROOT/'bin/nvidia-open-suite'));spec=importlib.util.spec_from_loader(loader.name,loader);cli=importlib.util.module_from_spec(spec);loader.exec_module(cli)
   with tempfile.TemporaryDirectory()as tmp:
    work=Path(tmp)/'work';deb=Path(tmp)/'test.deb';deb.write_bytes(b'fixture')
-   a=SimpleNamespace(driver_version='610.43.02',kernel=None,work=work,source=None,archive=None,provide_version=['nvidia-kernel-open-dkms=610.43.02-1'])
+   a=SimpleNamespace(driver_version='610.43.02',kernel=None,work=work,source=None,archive=None,provide_version=['nvidia-kernel-open-dkms=610.43.02-1'],firmware_package='firmware-nvidia-gsp=2:610.43.02-3')
    with patch('install.packages',side_effect=AssertionError('must not inspect build host packages')),patch.object(source,'detect',side_effect=AssertionError('must not inspect host DKMS')),patch.object(source,'prepare',return_value=Path(tmp)),patch.object(package,'build',return_value=deb)as build:
     cli.make_package(a)
    self.assertEqual(build.call_args.args[2],{'nvidia-kernel-open-dkms':'610.43.02-1'})
@@ -51,10 +51,9 @@ class Selection(unittest.TestCase):
    self.assertEqual(source.digest(stage/'COPYING'),source.META['nvidia_copying_sha256'])
 
  def test_firmware_target_mapping(self):
-  self.assertEqual(package.firmware_dependency(), 'firmware-nvidia-gsp (= 610.43.02-1)')
+  with self.assertRaises(ValueError):package.firmware_dependency()
   self.assertEqual(package.firmware_dependency('nvidia-firmware-610=610.43.02-0ubuntu1'), 'nvidia-firmware-610 (= 610.43.02-0ubuntu1)')
   self.assertEqual(package.firmware_dependency('firmware-nvidia-gsp=1:610.43.02-2'), 'firmware-nvidia-gsp (= 1:610.43.02-2)')
-  with self.assertRaisesRegex(ValueError,'Non-Debian'):package.firmware_dependency(versions={'nvidia-dkms-610-open':'610.43.02-0ubuntu1'})
   for value in ('bad', 'pkg=610.43.03-1', 'pkg=610.43.02;bad', 'pkg=610.43.02-1, evil', '../pkg=610.43.02'):
    with self.subTest(value=value), self.assertRaises(ValueError):package.firmware_dependency(value)
 
@@ -64,6 +63,34 @@ class OpenProviderAliases(unittest.TestCase):
   self.assertIn('nvidia-kernel-open-dkms',names)
   self.assertNotIn('nvidia-kernel-dkms',names)
   self.assertNotIn('nvidia-dkms-610',names)
- def test_explicit_generic_provider_alias_remains_available(self):
-  names=package.provided_packages({'nvidia-kernel-dkms':'610.43.02-1'})
-  self.assertIn('nvidia-kernel-dkms',names)
+ def test_only_target_provider_is_advertised(self):
+  self.assertEqual(package.provided_packages({}),('nvidia-kernel-open-dkms',))
+  with self.assertRaises(ValueError):package.provide_versions(['nvidia-kernel-dkms=610.43.02-1'])
+  self.assertEqual(package.REPLACES,('nvidia-kernel-open-dkms',))
+
+class TargetMetadata(unittest.TestCase):
+ def test_independent_epochs_and_revisions(self):
+  with patch.object(package,'installed_version',side_effect=['1:610.43.02-2','3:610.43.02-7'])as query:
+   versions,firmware=package.target_metadata()
+  self.assertEqual(versions,{'nvidia-kernel-open-dkms':'1:610.43.02-2'})
+  self.assertEqual(firmware,'firmware-nvidia-gsp=3:610.43.02-7')
+  self.assertEqual([c.args[0]for c in query.call_args_list],['nvidia-kernel-open-dkms','firmware-nvidia-gsp'])
+ def test_explicit_versions_never_query_host(self):
+  with patch.object(package,'installed_version',side_effect=AssertionError('host query')):
+   for detect in (False,True):
+    package.target_metadata(['nvidia-kernel-open-dkms=1:610.43.02-2'],'firmware-nvidia-gsp=3:610.43.02-7',detect)
+ def test_partial_override_queries_only_missing_package(self):
+  with patch.object(package,'installed_version',return_value='2:610.43.02-4')as query:
+   package.target_metadata(['nvidia-kernel-open-dkms=1:610.43.02-2'])
+  query.assert_called_once_with('firmware-nvidia-gsp')
+ def test_cross_build_requires_both_versions(self):
+  with patch.object(package,'installed_version',side_effect=AssertionError('host query')):
+   for args in ([],['nvidia-kernel-open-dkms=610.43.02-1']):
+    with self.assertRaises(ValueError):package.target_metadata(args,detect=False)
+ def test_missing_package_is_not_guessed(self):
+  for output in ('config-files\t610.43.02-1',''):
+   with patch.object(package.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=output)):
+    with self.assertRaises(ValueError):package.installed_version(package.TARGET_PROVIDER)
+ def test_dpkg_epoch_preserved(self):
+  with patch.object(package.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout='installed\t2:610.43.02-7')):
+   self.assertEqual(package.installed_version(package.TARGET_PROVIDER),'2:610.43.02-7')
