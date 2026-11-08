@@ -33,13 +33,13 @@ assert meta['cmp_upstream']['direct_script']=='driver/build.sh'
 assert '${CMP_WORK}'in meta['cmp_upstream']['stdout']
 assert 'with fuzz 1'in meta['cmp_upstream']['stdout']
 Path('/out/upstream-execution.json').write_text(json.dumps(meta['cmp_upstream'],indent=2)+'\n')
-# Verify cache reuse invokes the same script without applying CMP twice.
-canonical=Path('/work/canonical');shutil.copytree(original,canonical)
-cmp_prepare.prepare(canonical)
-before=source.tree_files(canonical)
-r=cmp_prepare.prepare(canonical,canonical=True)
-assert before==source.tree_files(canonical)
-assert r['cmp_upstream']['canonical_cache_reuse']
+# External edits in a CMP-touched file must survive source preparation.
+modified=Path('/work/modified');shutil.copytree(original,modified)
+target=modified/'kernel-open/nvidia/nv.c'
+marker='\n/* External modification preservation check. */\n'
+target.write_text(target.read_text()+marker)
+cmp_prepare.prepare(modified)
+assert marker in target.read_text()
 subprocess.run([sys.executable,'-B','-m','unittest','discover','-s','/work/tools/usr/share/nvidia-open-suite/toolkit/nvidia-open-suite/tests','-p','test_*.py'],check=True)
-Path('/out/result.json').write_text(json.dumps({'upstream_script_executed':True,'original_source_unchanged':True,'independent_preparations_equal':True,'fresh_preparation_debs_reproducible':True,'packaged_source_manifest_matches':True,'driver_and_build_files_equal_previous':True,'files':len(source.tree_files(b)),'canonical_cache_reuse_verified':True},indent=2)+'\n')
+Path('/out/result.json').write_text(json.dumps({'upstream_script_executed':True,'original_source_unchanged':True,'independent_preparations_equal':True,'fresh_preparation_debs_reproducible':True,'packaged_source_manifest_matches':True,'driver_and_build_files_equal_previous':True,'files':len(source.tree_files(b)),'external_modification_preserved':True},indent=2)+'\n')
 PY
