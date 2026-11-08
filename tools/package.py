@@ -2,7 +2,7 @@
 """Source-bearing five-module DKMS Debian package; no host registration."""
 import json,os,re,shutil,subprocess,tempfile
 from pathlib import Path
-from source import ROOT,REPO,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files
+from source import ROOT,REPO,BAR1,DRIVER,RELEASE,VERSION,META,digest,tree_files,require_supported
 NAME='nvidia-open-suite-dkms'
 STOCK=('nvidia-kernel-dkms','nvidia-open-kernel-dkms','nvidia-kernel-open-dkms','nvidia-dkms-610','nvidia-dkms-610-open')
 CONFLICTS=(*STOCK,'nvidia-bar1-p2p-dkms','nvidia-bar1-p2p-prebuilt')
@@ -55,11 +55,13 @@ def export_toolkit(destination):
 
 def build(source,output,provides_versions=None,firmware_package=None):
     """Build both packages with debhelper; dh_dkms owns DKMS maintscripts."""
+    require_supported(DRIVER)
     meta=json.loads((source/'nvidia-suite-source.json').read_text())
+    require_supported(meta['detected_install']['driver_version'])
     if meta['suite_version']!=RELEASE or meta['suite_manifest_sha256']!=digest(ROOT/'manifest.json'):raise ValueError('Source suite manifest mismatch')
     if tree_files(source)!=meta['prepared_files']:raise ValueError('Prepared source changed since validation')
     # Revision precedes the source hash, so source changes cannot downgrade APT.
-    version=VERSION+'.pkg'+str(META['package_revision'])+'.local.'+meta['original_tree_sha256'][:12]+'-'+str(META['package_revision'])
+    version='1:'+VERSION+'.pkg'+str(META['package_revision'])+'.local.'+meta['original_tree_sha256'][:12]+'-'+str(META['package_revision'])
     versions=validate_provides(provides_versions or {})
     firmware=firmware_dependency(firmware_package,versions)
     output.mkdir(parents=True,exist_ok=True)
@@ -131,4 +133,4 @@ Description: Optional preparation and test tools for NVIDIA Open Suite
         subprocess.run(['dpkg-buildpackage','-b','-us','-uc','-d'],cwd=root,check=True,
                        env=dict(os.environ,SOURCE_DATE_EPOCH='1793664000'))
         for artifact in root.parent.glob('*.deb'):shutil.copy2(artifact,output/artifact.name)
-        return output/(NAME+'_'+version+'_amd64.deb')
+        return output/(NAME+'_'+version.split(':',1)[-1]+'_amd64.deb')

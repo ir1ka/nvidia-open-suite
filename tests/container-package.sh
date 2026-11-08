@@ -23,7 +23,7 @@ fi
 dpkg --force-unsafe-io -i "$DEB_PATH"
 [ ! -f /etc/initramfs-tools/conf.d/nvidia-open-suite ]
 [ ! -f /etc/nvidia-open-suite/p2p.json ]
-[ "$(modinfo -k "$TARGET_KERNEL" -F nvidia_open_suite nvidia)" = 2.0.0 ]
+[ "$(modinfo -k "$TARGET_KERNEL" -F nvidia_open_suite nvidia)" = 2.1.0 ]
 [ -z "$(modinfo -k "$TARGET_KERNEL" -F pf_bar_in_nvidia nvidia)" ]
 for name in nvidia nvidia-modeset nvidia-drm nvidia-uvm nvidia-peermem;do
  file=$(modinfo -k "$TARGET_KERNEL" -n "$name")
@@ -35,9 +35,9 @@ find /var/lib/dkms/nvidia-open-suite -name make.log -type f -exec cp '{}' /out/v
 [ ! -e /usr/share/initramfs-tools/hooks/nvidia-open-suite ]
 [ ! -e /usr/sbin/nvidia-open-suite ]
 # Same autoinstall path used by future kernel/header updates.
-dkms remove -m nvidia-open-suite -v 610.43.02+suite.2.0.0 -k "$TARGET_KERNEL"
+dkms remove -m nvidia-open-suite -v 2.1.0+nvidia.610.43.02 -k "$TARGET_KERNEL"
 dkms autoinstall -k "$TARGET_KERNEL"
-[ "$(modinfo -k "$TARGET_KERNEL" -F nvidia_open_suite nvidia)" = 2.0.0 ]
+[ "$(modinfo -k "$TARGET_KERNEL" -F nvidia_open_suite nvidia)" = 2.1.0 ]
 dpkg --force-unsafe-io --remove nvidia-open-suite-dkms
 [ -f /etc/modprobe.d/nvidia-open-suite.conf ]
 if dkms status -m nvidia-open-suite | grep -q .;then exit 1;fi

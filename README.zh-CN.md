@@ -4,14 +4,26 @@
 
 **发行版验证范围：目前仅在 Debian 13 上测试过。其他发行版（包括 Ubuntu）尚未验证。
 
-基于 NVIDIA open 610.43.02 的 CMP 解锁与 PCIe P2P 集成。分支 `nvidia-610.43.02` 只维护此驱动基线；适配其他 NVIDIA 版本时使用独立 `nvidia-<版本>` 分支。内核 ABI 更新由 DKMS 处理，不等于支持其他 NVIDIA 驱动版本。
+集成 NVIDIA open 驱动的 CMP 解锁与 PCIe P2P。项目统一在 `main` 维护，使用 Suite 自有版本号（当前 **2.1.0**），未来发行标签采用 `v<Suite版本>`。历史驱动基线分支及标签保留为归档，不再作为并行开发分支。
+
+## 支持的 NVIDIA open 版本
+
+机器可读白名单为 [`supported-drivers.json`](supported-drivers.json)。仅允许列表中存在、且具有匹配的已审阅补丁和源码配置的版本准备源码和构建 deb；自动检测及显式 `--driver-version` 均执行检查，本地源码或离线归档也不能绕过。
+
+| NVIDIA open 版本 | Suite 版本 | 状态 | 发行版验证 |
+| --- | --- | --- | --- |
+| 610.43.02 | 2.1.0 | 支持；RTX 30/40 动态小 BAR1 仍为预览 | 仅 Debian 13 |
+
+其他版本直接拒绝。新增版本需要适配并验证源码及补丁配置，不能仅添加版本号。DKMS 对内核更新的自动构建不代表支持新的 NVIDIA 驱动版本。
+
+Suite 与 NVIDIA 分别编号。DKMS 版本为 `2.1.0+nvidia.610.43.02`，deb 版本以 `1:2.1.0+nvidia.610.43.02` 开头。Debian epoch `1:` 用于保证从旧的 NVIDIA 版本优先编号方式正常升级，不属于 Suite 版本或归档文件名。原驱动提供者的版本依赖仍使用 NVIDIA 发行版包版本。
 
 面向 Debian/Ubuntu amd64 和由包管理器/DKMS 管理的 NVIDIA open 驱动；PF BAR Recover、PCI ACS Scope 均不是安装依赖。
 
 ## 获取源码
 
 ```sh
-git clone --branch nvidia-610.43.02 --recurse-submodules https://github.com/ir1ka/nvidia-open-suite.git
+git clone --branch main --recurse-submodules https://github.com/ir1ka/nvidia-open-suite.git
 cd nvidia-open-suite
 ```
 

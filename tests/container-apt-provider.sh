@@ -97,7 +97,7 @@ apt-get --yes install "$DEB_PATH" > "$OUT/apt-install.log" 2>&1
 [ "$(dpkg-query -W -f='${Status}' nvidia-open-suite-dkms)" = 'install ok installed' ]
 ! dpkg-query -W -f='${Status}' nvidia-kernel-open-dkms 2>/dev/null | grep -q 'install ok installed'
 [ -z "$(dkms status -m nvidia -v 610.43.02)" ]
-[ -n "$(dkms status -m nvidia-open-suite -v 610.43.02+suite.2.0.0)" ]
+[ -n "$(dkms status -m nvidia-open-suite -v 2.1.0+nvidia.610.43.02)" ]
 [ ! -e /etc/nvidia-open-suite/p2p.json ]
 [ ! -e /etc/initramfs-tools/conf.d/nvidia-open-suite ]
 [ ! -e /usr/share/initramfs-tools/hooks/nvidia-open-suite ]
@@ -120,7 +120,7 @@ apt-get --yes remove nvidia-open-suite-tools > "$OUT/tools-remove.log" 2>&1
 [ ! -e /usr/sbin/nvidia-open-suite ]
 apt-get --yes remove nvidia-open-suite-dkms > "$OUT/remove.log" 2>&1
 [ -f /etc/modprobe.d/nvidia-open-suite.conf ]
-[ -z "$(dkms status -m nvidia-open-suite -v 610.43.02+suite.2.0.0)" ]
+[ -z "$(dkms status -m nvidia-open-suite -v 2.1.0+nvidia.610.43.02)" ]
 apt-get --yes purge nvidia-open-suite-dkms > "$OUT/purge.log" 2>&1
 [ ! -e /etc/modprobe.d/nvidia-open-suite.conf ]
 cp /work/dkms-calls "$OUT/dkms-calls.log"

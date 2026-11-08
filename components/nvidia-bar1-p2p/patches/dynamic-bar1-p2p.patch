@@ -125,7 +125,7 @@ diff --git a/kernel-open/nvidia/nv.c b/kernel-open/nvidia/nv.c
 +++ b/kernel-open/nvidia/nv.c
 @@ -126,6 +126,7 @@
  MODULE_VERSION(NV_VERSION_STRING);
- MODULE_INFO(nvidia_open_suite, "2.0.0");
+ MODULE_INFO(nvidia_open_suite, "2.1.0");
  MODULE_INFO(full_bar1_p2p, "1.0.0-explicit-opt-in");
 +MODULE_INFO(dynamic_bar1_p2p, "0.3-ampere-ada-tu102-preview");
  MODULE_DESCRIPTION("NVIDIA core GPU kernel module");

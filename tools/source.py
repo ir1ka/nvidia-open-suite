@@ -5,13 +5,27 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];REPO=ROOT.parent
 BAR1=ROOT/'components/nvidia-bar1-p2p'
 if not BAR1.is_dir():BAR1=REPO/'nvidia-bar1-p2p'
-META=json.loads((ROOT/'manifest.json').read_text());DRIVER=META['driver_version'];RELEASE=META['suite_version'];VERSION=DRIVER+'+suite.'+RELEASE
+META=json.loads((ROOT/'manifest.json').read_text());DRIVER=META['driver_version'];RELEASE=META['suite_version'];VERSION=RELEASE+'+nvidia.'+DRIVER
 spec=importlib.util.spec_from_file_location('bar1_source',BAR1/'tools/source_copy.py')
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 REQUIRED=json.loads((ROOT/'required-source.json').read_text())
 DKMS_ROOT=Path('/var/lib/dkms')
 LIVE_VERSION=Path('/sys/module/nvidia/version')
 SOURCE_ROOT=Path('/usr/src')
+
+def require_supported(version):
+    """Fail closed before download, preparation, or Debian packaging."""
+    registry=json.loads((ROOT/'supported-drivers.json').read_text())
+    entries=registry.get('drivers',{})
+    if registry.get('schema_version')!=1 or version not in entries:
+        raise ValueError('Unsupported NVIDIA open version '+str(version)+'; supported: '+', '.join(sorted(entries)))
+    entry=entries[version]
+    # Listing a version is not sufficient without its matching reviewed profile.
+    if (entry.get('status')!='supported' or entry.get('manifest')!='manifest.json' or
+        entry.get('source')!='components/nvidia-bar1-p2p/vendor.json' or
+        version!=DRIVER or base.VENDOR['driver_version']!=version):
+        raise ValueError('Supported-driver profile mismatch: '+str(version))
+    return entry
 
 def tool(name):
     for path in (shutil.which(name),'/usr/sbin/'+name,'/sbin/'+name):
@@ -38,7 +52,7 @@ def detect(kernel=None):
     if not re.fullmatch(r'[0-9][A-Za-z0-9.+_~-]*',kernel):raise ValueError('Invalid kernel ABI')
     def field(name):return subprocess.check_output([tool('modinfo'),'-k',kernel,'-F',name,'nvidia'],text=True).strip()
     version=field('version');license=field('license');filename=field('filename')
-    if version!=DRIVER:raise ValueError('Only NVIDIA open '+DRIVER+' is adapted; detected '+version)
+    require_supported(version)
     if 'GPL'not in license:raise ValueError('Original driver must be NVIDIA open, not proprietary')
     if '/updates/dkms/'not in filename:raise ValueError('Original NVIDIA module must resolve to a DKMS installation: '+filename)
     live=LIVE_VERSION
@@ -57,8 +71,7 @@ def detect(kernel=None):
 
 def build_plan(driver_version=None,kernel=None,require_installed=False):
     """An explicit supported version permits packaging without host DKMS/GPU."""
-    if driver_version is not None and driver_version!=DRIVER:
-        raise ValueError('Only NVIDIA open '+DRIVER+' has a validated patch set; requested '+driver_version)
+    if driver_version is not None:require_supported(driver_version)
     if driver_version is not None and not require_installed:
         if kernel is not None:raise ValueError('--kernel inspects installed DKMS; omit it for explicit-version prepare')
         return dict(driver_version=DRIVER,mode='explicit-version',
@@ -68,6 +81,7 @@ def build_plan(driver_version=None,kernel=None,require_installed=False):
     return plan
 
 def fetch_original(archive,work):
+    require_supported(DRIVER)
     v=base.VENDOR
     if archive is None:
         archive=work/'nvidia-official-source.tar.gz';partial=work/'nvidia-official-source.download'
@@ -102,6 +116,7 @@ def finalize(stage):
     return dict(suite_version=RELEASE,suite_manifest_sha256=digest(ROOT/'manifest.json'),cmpunlocker_commit=META['commit'])
 
 def prepare(plan,work,source=None,archive=None):
+    require_supported(plan['driver_version'])
     checks={'dynamic_p2p_sha256':BAR1/'patches/dynamic-bar1-p2p.patch','nvidia_copying_sha256':ROOT/'licenses/NVIDIA-COPYING','integration_sha256':ROOT/'patches/integration.patch','p2p_sha256':BAR1/'patches/full-bar1-p2p.patch','required_source_sha256':ROOT/'required-source.json','suite_build_sha256':ROOT/'packaging/suite-build.sh','dkms_conf_sha256':ROOT/'packaging/dkms.conf','check_modules_sha256':ROOT/'packaging/check-modules.sh'}
     for key,path in checks.items():
         if digest(path)!=META[key]:raise ValueError('Suite input hash mismatch: '+key)

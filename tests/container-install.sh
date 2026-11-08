@@ -63,7 +63,7 @@ if [ "$MODE" != managed ]; then
  exit 0
 fi
 python3 /suite/nvidia-open-suite/bin/nvidia-open-suite install --kernel "$kernel" --archive /archive.tar.gz --work /work/new
-[ "$(modinfo -k "$kernel" -F nvidia_open_suite nvidia)" = 2.0.0 ]
+[ "$(modinfo -k "$kernel" -F nvidia_open_suite nvidia)" = 2.1.0 ]
 [ -z "$(modinfo -k "$kernel" -F pf_bar_in_nvidia nvidia)" ]
 [ ! -f /etc/initramfs-tools/conf.d/nvidia-open-suite ]
 [ ! -f /etc/nvidia-open-suite/p2p.json ]
