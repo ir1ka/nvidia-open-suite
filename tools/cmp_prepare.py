@@ -2,12 +2,13 @@
 """Run the pinned upstream build.sh directly, through its prepare-only adapter."""
 import hashlib,json,os,re,shutil,subprocess,tarfile,tempfile,sys
 from pathlib import Path
+import driver_registry
 ROOT=Path(__file__).resolve().parents[1]
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 def verify(root=ROOT):
-    meta=json.loads((root/'manifest.json').read_text());upstream=root/'vendor/cmpunlocker'
+    meta=json.loads((root/'manifest.json').read_text());meta['driver_version']=driver_registry.profile(root=root)['driver_version'];upstream=root/'vendor/cmpunlocker'
     if not (upstream/'driver/build.sh').is_file():
         raise ValueError('Missing cmpunlocker submodule; run git submodule update --init --recursive')
     actual={str(p.relative_to(upstream)):digest(p)for p in upstream.rglob('*')if p.is_file()and not {'.git','__pycache__'}.intersection(p.relative_to(upstream).parts)}

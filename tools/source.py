@@ -5,7 +5,9 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];REPO=ROOT.parent
 BAR1=ROOT/'components/nvidia-bar1-p2p'
 if not BAR1.is_dir():BAR1=REPO/'nvidia-bar1-p2p'
-META=json.loads((ROOT/'manifest.json').read_text());DRIVER=META['driver_version'];RELEASE=META['suite_version'];VERSION=RELEASE+'+nvidia.'+DRIVER
+sys.path.insert(0,str(ROOT/'tools'))
+import driver_registry
+META=json.loads((ROOT/'manifest.json').read_text());DRIVER=driver_registry.profile(root=ROOT)['driver_version'];RELEASE=META['suite_version'];VERSION=RELEASE+'+nvidia.'+DRIVER
 spec=importlib.util.spec_from_file_location('bar1_source',BAR1/'tools/source_copy.py')
 base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
 REQUIRED=json.loads((ROOT/'required-source.json').read_text())
@@ -15,15 +17,8 @@ SOURCE_ROOT=Path('/usr/src')
 
 def require_supported(version):
     """Fail closed before download, preparation, or Debian packaging."""
-    registry=json.loads((ROOT/'supported-drivers.json').read_text())
-    entries=registry.get('drivers',{})
-    if registry.get('schema_version')!=1 or version not in entries:
-        raise ValueError('Unsupported NVIDIA open version '+str(version)+'; supported: '+', '.join(sorted(entries)))
-    entry=entries[version]
-    # Listing a version is not sufficient without its matching reviewed profile.
-    if (entry.get('status')!='supported' or entry.get('manifest')!='manifest.json' or
-        entry.get('source')!='components/nvidia-bar1-p2p/vendor.json' or
-        version!=DRIVER or base.VENDOR['driver_version']!=version):
+    entry=driver_registry.profile(version,root=ROOT)
+    if version!=DRIVER:
         raise ValueError('Supported-driver profile mismatch: '+str(version))
     return entry
 
@@ -110,10 +105,12 @@ def acquire(plan,work,source=None,archive=None):
 
 def finalize(stage):
     if not(stage/'COPYING').exists():shutil.copyfile(ROOT/'licenses/NVIDIA-COPYING',stage/'COPYING')
-    for name in ('dkms.conf','suite-build.sh','check-modules.sh'):shutil.copyfile(ROOT/'packaging'/name,stage/name)
+    for name in ('dkms.conf','suite-build.sh','check-modules.sh'):
+        text=(ROOT/'packaging'/name).read_text().replace('@DKMS_VERSION@',VERSION).replace('@DRIVER_VERSION@',DRIVER)
+        (stage/name).write_text(text)
     (stage/'suite-build.sh').chmod(0o755)
     (stage/'check-modules.sh').chmod(0o755)
-    return dict(suite_version=RELEASE,suite_manifest_sha256=digest(ROOT/'manifest.json'),cmpunlocker_commit=META['commit'])
+    return dict(driver_registry_sha256=digest(ROOT/'supported-drivers.json'),suite_version=RELEASE,suite_manifest_sha256=digest(ROOT/'manifest.json'),cmpunlocker_commit=META['commit'])
 
 def prepare(plan,work,source=None,archive=None):
     require_supported(plan['driver_version'])

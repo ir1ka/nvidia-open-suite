@@ -1,9 +1,12 @@
 #!/usr/bin/python3
 """Internal read-only source-copy and patch preparation helpers for Suite."""
-import hashlib,json,re,shutil,subprocess,sys,tempfile
+import importlib.util,hashlib,json,re,shutil,subprocess,sys,tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-VENDOR=json.loads((ROOT/'vendor.json').read_text())
+suite=ROOT.parents[1] if (ROOT.parents[1]/'supported-drivers.json').is_file() else ROOT.parent/'nvidia-open-suite'
+spec=importlib.util.spec_from_file_location('component_driver_registry',suite/'tools/driver_registry.py')
+registry=importlib.util.module_from_spec(spec);spec.loader.exec_module(registry)
+VENDOR=registry.profile()['source']
 IGNORES=shutil.ignore_patterns('.git','_out','build','__pycache__','*.o','*.ko','*.ko.*','*.o_binary','*.mod','*.mod.c','.*.cmd','Module.symvers','modules.order','*.rej','*.orig','*.key','*.pem','*.p12','*.pfx')
 
 def run(args,**kwargs):
