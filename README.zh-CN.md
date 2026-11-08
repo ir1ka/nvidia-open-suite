@@ -37,7 +37,15 @@ sudo apt install /var/tmp/nvidia-suite-build-01/packages/nvidia-open-suite-dkms_
 
 `--firmware-package PACKAGE=VERSION` 指定目标系统的精确 GSP 固件依赖；默认是 Debian 的 `firmware-nvidia-gsp`，非 Debian 目标必须显式指定。
 
-`--provide-version` 是目标发行版的原包版本示例，按目标系统替换；可以重复指定不同的已知 NVIDIA 内核包名。离线时加 `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`，已有完整目标源码时加 `--source /path/to/source`。指定版本的 prepare 不读取构建机 NVIDIA/DKMS 注册或包版本；找到的本地源码仍必须匹配该版本，否则使用固定官方归档。
+`--provide-version` 请使用目标发行版的原包版本，可重复指定不同的已知 NVIDIA 内核包名。
+
+### 驱动源码获取
+
+Suite Git 仓库和发行源码归档仅包含集成代码、补丁和固定版本的 cmpunlocker 依赖，**不内置 NVIDIA open 驱动源码树**。构建的 `prepare` 阶段从 NVIDIA 官方 GitHub 下载对应受支持版本的 release tag 源码归档，并按 `components/nvidia-bar1-p2p/vendor.json` 中的固定 SHA256 校验，随后解压和打补丁。不再自动复用 `/usr/src/nvidia-*`；已安装驱动的检测仅用于选择版本和包元数据。
+
+离线构建可指定 `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`，仍须通过相同 SHA256 校验。开发者可显式使用 `--source /path/to/source` 提供完整、版本匹配且未打过 Suite 补丁的源码；它与 `--archive` 互斥，绕过归档来源校验，不是默认发布构建路径。
+
+生成的 **DKMS deb 必须包含下载后打好补丁的驱动源码**，供目标系统安装和内核更新时离线编译；这些阶段无需再次下载。可选 tools 包仅包含准备工具和补丁，不包含下载的驱动源码树。项目源码分发与可安装的 DKMS 驱动包属于不同层次。
 
 
 ## 三个阶段与包替换语义
