@@ -1,6 +1,7 @@
 .PHONY: check
 check:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s $(if $(wildcard components/nvidia-bar1-p2p),components/nvidia-bar1-p2p,../nvidia-bar1-p2p)/tests -p 'test_source_copy.py'
 
 .PHONY: check-source
 check-source: check

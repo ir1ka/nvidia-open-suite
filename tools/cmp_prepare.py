@@ -40,7 +40,7 @@ def prepare(stage,profile='mixed',root=ROOT):
         result=subprocess.run(['bash',str(script)],cwd=work,env=env,stdin=subprocess.DEVNULL,capture_output=True,text=True)
         print(result.stdout,end='',flush=True)
         if result.returncode:
-            raise RuntimeError('Upstream CMP source preparation failed:\n'+result.stdout+result.stderr)
+            raise RuntimeError('CMP patch preparation failed: source may not match, may conflict with existing patches, or may contain precompiled RM binaries instead of source. Upstream output:\n'+result.stdout+result.stderr)
         if 'Source preparation complete; compilation and installation delegated to DKMS'not in result.stdout:raise RuntimeError('Upstream did not reach the source-only completion boundary')
         # GNU patch backups and its build cache stamp are not driver sources.
         for p in output.rglob('*'):

@@ -82,7 +82,6 @@
   "suite_version": "2.1.0",
   "integration_sha256": "6ccdef095b2a64ff6a2591b4a427c0636760d89222b0a00857eab0487c3f4a21",
   "p2p_sha256": "9957983fd4385abf53924d117a771a38fb2066bddd6a1de2da1a2163d9a3e922",
-  "required_source_sha256": "eadd1a7a1f390ff134c0b3f943a06259368b36796a13613c42e292785f7755cf",
   "suite_build_sha256": "3352b228b290c4a193a69dfb02f8a60578e86045e7beedbf54e6898aea81fd81",
   "dkms_conf_sha256": "0281a4a04570eb00fb0db4b53beda6a30564fb301f7090dbaaeca1dcfcfe7fc7",
   "check_modules_sha256": "cd17652dd6643b58775897d523081b6e3781eb66dc7fd6bca43f484e8cfcf12d",

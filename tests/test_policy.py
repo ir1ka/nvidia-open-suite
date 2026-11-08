@@ -46,9 +46,6 @@ class Detection(unittest.TestCase):
  def test_loaded_disk_mismatch_refused(self):
   source.LIVE_VERSION.write_text('600.0')
   with self.assertRaisesRegex(ValueError,'differ'):self.detect()
- def test_binary_only_is_not_complete(self):
-  p=self.root/'binary';p.mkdir();(p/'nv-kernel.o_binary').write_bytes(b'ELF')
-  self.assertFalse(source.complete(p))
  def test_invalid_tar_archive_is_rejected(self):
   archive=self.root/'bad.tar.gz';archive.write_bytes(b'bad')
   with self.assertRaises(tarfile.ReadError):source.fetch_original(archive,self.root)
@@ -62,7 +59,7 @@ class SourceDiscovery(unittest.TestCase):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name)
   self.usr=self.root/'usr';self.usr.mkdir();self.partial=self.usr/'nvidia-610.43.02';self.partial.mkdir()
   self.work=self.root/'work';self.work.mkdir();self.plan={'provider':{'source':str(self.partial)}}
-  for name,value in [('SOURCE_ROOT',self.usr),('REQUIRED',['version.mk','full.c'])]:
+  for name,value in [('SOURCE_ROOT',self.usr)]:
    p=patch.object(source,name,value);p.start();self.addCleanup(p.stop)
  def full(self,name):
   p=self.usr/name;p.mkdir();(p/'version.mk').write_text('NVIDIA_VERSION = 610.43.02\n');(p/'full.c').write_text('complete');return p
@@ -149,5 +146,5 @@ class ModifiedArchives(unittest.TestCase):
    with tarfile.open(archive,'w:gz') as tar:
     for name,text in [('version.mk','NVIDIA_VERSION = '+source.DRIVER+'\n'),('full.c','/* external driver modification */\n')]:
      data=text.encode();info=tarfile.TarInfo('open-gpu-kernel-modules-'+source.DRIVER+'/'+name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
-   with patch.object(source,'REQUIRED',['version.mk','full.c']):result=source.fetch_original(archive,root)
+   result=source.fetch_original(archive,root)
    self.assertIn('external driver modification',(result/'full.c').read_text())

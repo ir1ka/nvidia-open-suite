@@ -17,17 +17,14 @@ def manifest(source):
             for p in sorted(source.rglob('*'))if p.is_file()and p.name!='full-bar1-source.json'}
 
 def source_version(source):
-    text=(source/'version.mk').read_text()
+    try:text=(source/'version.mk').read_text()
+    except FileNotFoundError as error:raise ValueError('Cannot identify NVIDIA source version: missing version.mk; source layout may not match') from error
     match=re.search(r'^NVIDIA_VERSION\s*=\s*([0-9.]+)\s*$',text,re.M)
     if not match:raise ValueError('Missing NVIDIA_VERSION in full open source')
     return match.group(1)
 
-def complete(source):
-    return all((source/p).is_file()for p in ('version.mk','Makefile','kernel-open/nvidia/nv.c','src/nvidia/src/kernel/gpu/bus/kern_bus.c','src/nvidia/src/kernel/mem_mgr/io_vaspace.c'))
-
 def prepare_local(source,destination,patch_paths=None,finalize=None,metadata_name="nvidia-suite-source.json",prepare_hook=None):
     source=source.resolve();destination=destination.resolve()
-    if not complete(source):raise ValueError('Incomplete open RM source; kernel interface sources alone are insufficient')
     if source_version(source)!=VENDOR['driver_version']:raise ValueError('Unvalidated NVIDIA version: '+source_version(source))
     if any((source/name).exists()for name in ('full-bar1-source.json','nvidia-suite-source.json')):raise ValueError('Already patched source: use the Suite package builder or supply original source')
     if destination.exists()or source==destination or source in destination.parents:raise ValueError('Use a new destination outside the source tree')
@@ -48,8 +45,11 @@ def prepare_local(source,destination,patch_paths=None,finalize=None,metadata_nam
         patch=ROOT/'patches/full-bar1-p2p.patch'
         chain=list(patch_paths)if patch_paths is not None else [patch]
         for item in chain:
-            run(['patch','--no-backup-if-mismatch','--dry-run','--batch','--fuzz=0','--forward','-p1','-i',item],cwd=stage)
-            run(['patch','--no-backup-if-mismatch','--batch','--fuzz=0','--forward','-p1','-i',item],cwd=stage)
+            try:
+                run(['patch','--no-backup-if-mismatch','--dry-run','--batch','--fuzz=0','--forward','-p1','-i',item],cwd=stage)
+                run(['patch','--no-backup-if-mismatch','--batch','--fuzz=0','--forward','-p1','-i',item],cwd=stage)
+            except subprocess.CalledProcessError as error:
+                raise ValueError('Patch '+str(item)+' failed: source may not match, may conflict with existing patches, or may contain precompiled RM binaries instead of the required source. See patch output above.') from error
         for test in ('check_driver.py','check_registry.py','check_lifetime.py'):
             run([sys.executable,ROOT/'tests'/test,'--source',stage])
         extra=finalize(stage)if finalize is not None else {}
