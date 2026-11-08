@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "drivers": {
+    "610.43.02": {
+      "manifest": "manifest.json",
+      "source": "components/nvidia-bar1-p2p/vendor.json",
+      "status": "supported",
+      "tested_distribution": "Debian 13"
+    }
+  }
+}

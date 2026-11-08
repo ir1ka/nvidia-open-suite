@@ -2,7 +2,7 @@
 # Disposable container only: /source and target headers read-only, no host GPU,
 # /boot, /etc or writable host /lib/modules mounted. Firmware is a test fixture.
 set -euo pipefail
-trap 'rc=$?; log=/var/lib/dkms/nvidia-open-suite/610.43.02+suite.2.0.0/build/make.log; [ ! -f "$log" ] || cp "$log" /out/driver-build.log; exit "$rc"' EXIT
+trap 'rc=$?; log=/var/lib/dkms/nvidia-open-suite/2.1.0+nvidia.610.43.02/build/make.log; [ ! -f "$log" ] || cp "$log" /out/driver-build.log; exit "$rc"' EXIT
 : "${TARGET_KERNEL:?explicit target ABI required}"
 export PYTHONDONTWRITEBYTECODE=1
 cd /source
@@ -42,7 +42,7 @@ dpkg-deb --build /work/firmware /work/firmware.deb
 dpkg -i /work/firmware.deb
 export NV_SUITE_JOBS=4
 dpkg -i /out/packages/*dkms*.deb > /out/dkms-install.log 2>&1
-cp /var/lib/dkms/nvidia-open-suite/610.43.02+suite.2.0.0/*/x86_64/log/make.log /out/driver-build.log
+cp /var/lib/dkms/nvidia-open-suite/2.1.0+nvidia.610.43.02/*/x86_64/log/make.log /out/driver-build.log
 dkms status > /out/dkms-status.txt
 find "/lib/modules/$TARGET_KERNEL" -maxdepth 4 -type f > /out/installed-module-files.txt
 # An image-less container lacks the normal distro depmod trigger context.

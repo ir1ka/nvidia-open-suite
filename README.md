@@ -4,14 +4,26 @@
 
 **Distribution validation:** Tested only on Debian 13. Other distributions, including Ubuntu, have not been validated.
 
-CMP unlocking and PCIe P2P integration for NVIDIA open driver **610.43.02**. The `nvidia-610.43.02` branch maintains this driver baseline; other NVIDIA versions require separate `nvidia-<version>` branches and adaptation. DKMS rebuilds for kernel updates do not imply compatibility with other NVIDIA driver versions.
+CMP unlocking and PCIe P2P integration for NVIDIA open drivers. Suite is maintained on `main` with its own version (**2.1.0**); future release tags use `v<suite-version>`. Historical driver-baseline branches and tags remain available as archives, not parallel development branches.
+
+## Supported NVIDIA open versions
+
+The machine-readable allowlist is [`supported-drivers.json`](supported-drivers.json). Only listed versions with a matching reviewed patch/source profile may be prepared or packaged into deb files. Both automatic detection and explicit `--driver-version` selection enforce this list; local source and offline archives do not bypass it.
+
+| NVIDIA open version | Suite version | Status | Distribution validation |
+| --- | --- | --- | --- |
+| 610.43.02 | 2.1.0 | Supported; RTX 30/40 dynamic small BAR1 remains preview | Debian 13 only |
+
+Other NVIDIA versions are rejected. Adding a row requires adapting and validating the source/patch profile, not merely adding a version string. Kernel updates handled by DKMS do not add support for new NVIDIA driver versions.
+
+Suite and NVIDIA versions are separate. DKMS identifies this build as `2.1.0+nvidia.610.43.02`; deb versions start with `1:2.1.0+nvidia.610.43.02`. The Debian epoch `1:` ensures upgrades from the old NVIDIA-version-first package scheme; it is not part of the Suite version or archive filename. Versioned stock-provider dependencies still use the NVIDIA distribution package version.
 
 For Debian/Ubuntu amd64 systems using a package-managed NVIDIA open DKMS driver. PF BAR Recover and PCI ACS Scope are independent projects and are not dependencies.
 
 ## Get the source
 
 ```sh
-git clone --branch nvidia-610.43.02 --recurse-submodules https://github.com/ir1ka/nvidia-open-suite.git
+git clone --branch main --recurse-submodules https://github.com/ir1ka/nvidia-open-suite.git
 cd nvidia-open-suite
 ```
 

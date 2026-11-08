@@ -96,3 +96,23 @@ class SourceDiscovery(unittest.TestCase):
  def test_explicit_prepatched_source_refused(self):
   (self.partial/'nvidia-suite-source.json').write_text('{}')
   with self.assertRaisesRegex(ValueError,'already patched'):source.acquire(self.plan,self.work,source=self.partial)
+
+class SupportedDrivers(unittest.TestCase):
+ def test_removing_entry_blocks_prepare_and_package(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);(root/'supported-drivers.json').write_text('{"schema_version":1,"drivers":{}}')
+   with patch.object(source,'ROOT',root),patch.object(source,'acquire')as acquire:
+    with self.assertRaisesRegex(ValueError,'Unsupported'):source.build_plan('610.43.02')
+    with self.assertRaisesRegex(ValueError,'Unsupported'):source.prepare({'driver_version':'610.43.02'},root)
+    with self.assertRaisesRegex(ValueError,'Unsupported'):package.build(root,root/'out')
+    acquire.assert_not_called()
+ def test_unreviewed_profile_is_not_enabled_by_listing(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);(root/'supported-drivers.json').write_text(json.dumps({'schema_version':1,'drivers':{'610.43.03':{'status':'supported','manifest':'manifest.json','source':'components/nvidia-bar1-p2p/vendor.json'}}}))
+   with patch.object(source,'ROOT',root):
+    with self.assertRaisesRegex(ValueError,'profile mismatch'):source.build_plan('610.43.03')
+ def test_suite_version_and_upgrade_order(self):
+  self.assertTrue(source.VERSION.startswith(source.RELEASE+'+nvidia.'))
+  new='1:'+source.VERSION+'.pkg1.local.abcdef-1'
+  subprocess.run(['dpkg','--compare-versions',new,'gt','610.43.02+suite.2.0.0.pkg14.local.abcdef-14'],check=True)
+  self.assertIn('PACKAGE_VERSION="'+source.VERSION+'"',(ROOT/'packaging/dkms.conf').read_text())

@@ -24,6 +24,8 @@ with archive(main,'--fsys-tarfile')as t:
     from gen2_deployment import script
     assert t.extractfile('./usr/lib/nvidia-open-suite/gen2-hammer').read()==script().encode()
     assert not any('/initramfs-tools/'in p or '/initramfs-runtime'in p for p in files)
+from source import VERSION
+assert subprocess.check_output(['dpkg-deb','-f',str(main),'Version'],text=True).strip().startswith('1:'+VERSION+'.')
 control=subprocess.check_output(['dpkg-deb','-f',str(main)],text=True)
 assert 'dkms (>='in control and 'firmware-nvidia-gsp (= 610.43.02-1)'in control
 assert 'nvidia-kernel-610.43.02'in control
@@ -32,6 +34,7 @@ assert 'liblzma5'not in deps and 'libzstd1'not in deps and 'findutils'not in dep
 with archive(tools,'--fsys-tarfile')as t:
     names=t.getnames()
     assert './usr/sbin/nvidia-open-suite'in names
+    assert './usr/share/nvidia-open-suite/toolkit/nvidia-open-suite/supported-drivers.json'in names
     assert any('/tests/check_cmp.py'in p for p in names)
     assert not any(p.startswith('./usr/src/')or '/initramfs-tools/hooks/'in p for p in names)
 with archive(tools,'--ctrl-tarfile')as t:

@@ -20,7 +20,7 @@ class Selection(unittest.TestCase):
   detect.assert_called_once()
  def test_unknown_version_fails_without_host_detection(self):
   with patch.object(source,'detect')as detect:
-   with self.assertRaisesRegex(ValueError,'validated patch'):source.build_plan('610.43.03')
+   with self.assertRaisesRegex(ValueError,'Unsupported NVIDIA open'):source.build_plan('610.43.03')
   detect.assert_not_called()
  def test_offline_kernel_inspection_is_rejected(self):
   with self.assertRaisesRegex(ValueError,'--kernel'):source.build_plan('610.43.02','target')
