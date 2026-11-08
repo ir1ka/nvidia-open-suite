@@ -11,8 +11,6 @@ def verify(root=ROOT):
     meta=json.loads((root/'manifest.json').read_text());meta['driver_version']=driver_registry.profile(root=root)['driver_version'];upstream=root/'vendor/cmpunlocker'
     if not (upstream/'driver/build.sh').is_file():
         raise ValueError('Missing cmpunlocker submodule; run git submodule update --init --recursive')
-    actual={str(p.relative_to(upstream)):digest(p)for p in upstream.rglob('*')if p.is_file()and not {'.git','__pycache__'}.intersection(p.relative_to(upstream).parts)}
-    meta['upstream_files']=actual  # Provenance only, never a pristine-source gate.
     order=re.search(r'PATCH_ORDER=\(\n(.*?)\n\)',(upstream/'driver/build.sh').read_text(),re.S)
     if not order or order.group(1).split()!=meta['patch_order']:raise ValueError('Upstream patch order differs from manifest')
     if meta['driver_version']not in (upstream/'driver/VERSION').read_text().splitlines():raise ValueError('Driver version absent from upstream support list')
@@ -30,7 +28,7 @@ def prepare(stage,profile='mixed',root=ROOT):
     if profile not in ('mixed','8gb','10gb'):raise ValueError('Unknown CMP profile')
     # Every path the original script may extract/remove is private to this call.
     with tempfile.TemporaryDirectory(prefix='.cmp-upstream-',dir=stage.parent)as tmp:
-        work=Path(tmp);recipe=work/'recipe';script=adapt_recipe(recipe,root);script_hash=digest(script)
+        work=Path(tmp);recipe=work/'recipe';script=adapt_recipe(recipe,root)
         build=work/'build';build.mkdir();name='open-gpu-kernel-modules-'+meta['driver_version'];output=build/name
         # Supply the caller's validated source, never download or touch /usr/src.
         archive=build/(name+'.tar.gz')
@@ -51,4 +49,4 @@ def prepare(stage,profile='mixed',root=ROOT):
             if p.is_dir():shutil.rmtree(p)
             else:p.unlink()
         shutil.copytree(output,stage,dirs_exist_ok=True)
-        return {'cmp_upstream':{'commit':meta['commit'],'direct_script':'driver/build.sh','original_script_sha256':meta['upstream_files']['driver/build.sh'],'executed_private_script_sha256':script_hash,'prepare_only_adapter_sha256':meta['cmp_prepare_only_sha256'],'constants_sha256':meta['upstream_files']['common/constants.yaml'],'profile':profile,'patch_order':meta['patch_order'],'stdout':result.stdout.replace(str(work),'${CMP_WORK}'),'stderr':result.stderr.replace(str(work),'${CMP_WORK}')}}
+        return {'cmp_upstream':{'commit':meta['commit'],'direct_script':'driver/build.sh','prepare_only_adapter_sha256':meta['cmp_prepare_only_sha256'],'profile':profile,'patch_order':meta['patch_order'],'stdout':result.stdout.replace(str(work),'${CMP_WORK}'),'stderr':result.stderr.replace(str(work),'${CMP_WORK}')}}
