@@ -81,32 +81,18 @@ def fetch_original(archive,work):
     return target/('open-gpu-kernel-modules-'+DRIVER)
 
 def acquire(plan,work,source=None,archive=None):
-    registered=Path(plan['provider']['source']).resolve()
-    original=(source or registered).resolve()
-    markers=[original/name for name in ('nvidia-suite-source.json','full-bar1-source.json')if(original/name).exists()]
-    if markers and archive is not None:
-        return fetch_original(archive,work),'explicit-official-rebuild'
-    def usable(path):
-        if any((path/name).exists()for name in ('nvidia-suite-source.json','full-bar1-source.json')):return False
-        try:return base.source_version(path)==DRIVER and complete(path)
-        except (OSError,ValueError):return False
-    if complete(original)and not markers:
-        if base.source_version(original)!=DRIVER:raise ValueError('Source/installed driver version mismatch')
-        return original,'installed-full-source'
+    # Never implicitly reuse installed or retained driver trees. The pinned
+    # release archive is the reproducible default, including Suite rebuilds.
     if source is None:
-        # Prefer the exact original retained by an earlier suite conversion.
-        for marker in markers:
-            prior=Path(json.loads(marker.read_text()).get('original_source','/nonexistent')).resolve()
-            if usable(prior):return prior,'installed-full-source'
-        if usable(registered.parent):return registered.parent,'installed-full-source'
-        candidates=sorted({p.resolve()for p in SOURCE_ROOT.glob('nvidia-*')if p.is_dir()and usable(p.resolve())})
-        if len(candidates)>1:raise ValueError('Multiple complete 610.43.02 source trees; specify --source: '+', '.join(map(str,candidates)))
-        if candidates:return candidates[0],'installed-full-source'
-    if markers:
-        raise ValueError('Source is already patched and no retained original was found; supply original --source or an explicit official --archive')
-    missing=[name for name in REQUIRED if not(original/name).is_file()]
-    print('Incomplete installed source (possibly precompiled RM); using pinned official full source. Missing files: '+str(len(missing)),flush=True)
-    return fetch_original(archive,work),'official-fallback'
+        return fetch_original(archive,work),'official-archive' if archive is not None else 'official-download'
+    if archive is not None:
+        raise ValueError('Use either --source or --archive, not both')
+    original=source.resolve()
+    if any((original/name).exists()for name in ('nvidia-suite-source.json','full-bar1-source.json')):
+        raise ValueError('Explicit source is already patched; supply original source or use the official download')
+    if not complete(original):raise ValueError('Explicit source must be a complete NVIDIA open source tree')
+    if base.source_version(original)!=DRIVER:raise ValueError('Source/driver version mismatch')
+    return original,'explicit-local-source'
 
 def finalize(stage):
     if not(stage/'COPYING').exists():shutil.copyfile(ROOT/'licenses/NVIDIA-COPYING',stage/'COPYING')

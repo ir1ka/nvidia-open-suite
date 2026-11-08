@@ -67,22 +67,32 @@ class SourceDiscovery(unittest.TestCase):
    p=patch.object(source,name,value);p.start();self.addCleanup(p.stop)
  def full(self,name):
   p=self.usr/name;p.mkdir();(p/'version.mk').write_text('NVIDIA_VERSION = 610.43.02\n');(p/'full.c').write_text('complete');return p
- def test_unique_usr_src_full_tree_preferred_to_binary_registration(self):
-  expected=self.full('nvidia-full-610.43.02')
-  with patch.object(source,'fetch_original')as fetch:
-   result,origin=source.acquire(self.plan,self.work)
-  self.assertEqual(result,expected);self.assertEqual(origin,'installed-full-source');fetch.assert_not_called()
- def test_ambiguous_full_trees_refused(self):
-  self.full('nvidia-a');self.full('nvidia-b')
-  with self.assertRaisesRegex(ValueError,'Multiple complete'):source.acquire(self.plan,self.work)
- def test_interface_only_falls_back_to_verified_archive(self):
+ def test_installed_full_tree_does_not_override_download(self):
+  self.full('nvidia-full-610.43.02')
   with patch.object(source,'fetch_original',return_value=self.root/'official')as fetch:
+   result,origin=source.acquire(self.plan,self.work)
+  self.assertEqual(result,self.root/'official');self.assertEqual(origin,'official-download')
+  fetch.assert_called_once_with(None,self.work)
+ def test_multiple_local_trees_do_not_change_default(self):
+  self.full('nvidia-a');self.full('nvidia-b')
+  with patch.object(source,'fetch_original')as fetch:source.acquire(self.plan,self.work)
+  fetch.assert_called_once_with(None,self.work)
+ def test_offline_archive_is_explicit_and_verified(self):
+  with patch.object(source,'fetch_original')as fetch:
    _,origin=source.acquire(self.plan,self.work,archive=Path('/offline.tar.gz'))
-  self.assertEqual(origin,'official-fallback');fetch.assert_called_once()
- def test_retained_original_after_suite_install_is_reused(self):
+  self.assertEqual(origin,'official-archive');fetch.assert_called_once_with(Path('/offline.tar.gz'),self.work)
+ def test_prior_suite_install_does_not_prevent_download(self):
   original=self.full('nvidia-original');(self.partial/'nvidia-suite-source.json').write_text(json.dumps({'original_source':str(original)}))
-  with patch.object(source,'fetch_original')as fetch:result,_=source.acquire(self.plan,self.work)
-  self.assertEqual(result,original);fetch.assert_not_called()
- def test_prepatched_missing_original_never_silently_discards_changes(self):
+  with patch.object(source,'fetch_original')as fetch:source.acquire(self.plan,self.work)
+  fetch.assert_called_once_with(None,self.work)
+ def test_explicit_source_is_an_opt_in_override(self):
+  original=self.full('nvidia-original')
+  with patch.object(source,'fetch_original')as fetch:
+   result,origin=source.acquire(self.plan,self.work,source=original)
+  self.assertEqual(result,original);self.assertEqual(origin,'explicit-local-source');fetch.assert_not_called()
+ def test_explicit_source_and_archive_conflict(self):
+  with self.assertRaisesRegex(ValueError,'either'):
+   source.acquire(self.plan,self.work,source=self.partial,archive=Path('/offline.tar.gz'))
+ def test_explicit_prepatched_source_refused(self):
   (self.partial/'nvidia-suite-source.json').write_text('{}')
-  with self.assertRaisesRegex(ValueError,'already patched'):source.acquire(self.plan,self.work)
+  with self.assertRaisesRegex(ValueError,'already patched'):source.acquire(self.plan,self.work,source=self.partial)

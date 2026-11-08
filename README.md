@@ -37,7 +37,14 @@ On a build host without the driver, specify the supported version explicitly:
 
 Replace the example distribution package version with the target system's version. Repeat `--provide-version` for other supported provider package names if necessary. Use `--firmware-package PACKAGE=VERSION` for the target's exact GSP firmware dependency; the default is Debian's `firmware-nvidia-gsp`, and non-Debian targets must specify it explicitly.
 
-For offline preparation, add `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`; for an existing complete source tree, use `--source /path/to/source`. Explicit-version preparation does not inspect the build host's installed NVIDIA/DKMS registrations or package versions. Local source must still match the requested version; otherwise preparation uses the pinned official archive.
+### Driver source acquisition
+
+The Suite Git repository and release source archive contain integration code, patches, and the pinned cmpunlocker dependency, **not a bundled NVIDIA open driver source tree**. During `prepare`, the build downloads NVIDIA's official GitHub release-tag source archive for the selected supported version and verifies the pinned SHA256 in `components/nvidia-bar1-p2p/vendor.json` before extraction and patching. A complete installed `/usr/src/nvidia-*` tree is no longer implicitly reused. Installed-driver detection selects the version and provider metadata, not the source contents.
+
+For offline builds, pass `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`; the same pinned SHA256 is mandatory. The explicit development override `--source /path/to/source` accepts a complete, matching, unpatched local tree and is mutually exclusive with `--archive`. It bypasses archive provenance verification and is not the default release build path.
+
+The generated **DKMS deb necessarily includes the downloaded and patched driver source** so DKMS can compile at installation and after kernel updates without downloading source again. The optional tools package contains preparation tools and patches, not the downloaded driver tree. This distinction applies to project source distribution versus the installable DKMS driver package.
+
 
 ## Preparation, installation, and kernel updates
 
