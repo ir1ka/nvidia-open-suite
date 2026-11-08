@@ -8,7 +8,7 @@ printf 'fixture headers; no kernel build\n' > /lib/modules/fixture-kernel/build/
 # Only DKMS/initramfs side effects are fixtures; package solving/removal is real.
 cat > /usr/sbin/dkms <<'PY'
 #!/usr/bin/python3
-import json,sys
+import json,sys,shutil
 from pathlib import Path
 p=Path('/work/dkms-state.json');state=json.loads(p.read_text())if p.exists()else{}
 a=sys.argv[1:];action=a[0]
@@ -25,7 +25,9 @@ elif action in ('add','build','install'):
   d=Path('/var/lib/dkms')/m/v;d.mkdir(parents=True,exist_ok=True)
   link=d/'source'
   if not link.exists():link.symlink_to('/usr/src/'+m+'-'+v)
-elif action=='remove':state.pop(key,None)
+elif action=='remove':
+ state.pop(key,None)
+ if m and v:shutil.rmtree(Path('/var/lib/dkms')/m/v,ignore_errors=True)
 else:raise SystemExit('Unexpected DKMS fixture command')
 p.write_text(json.dumps(state))
 PY
