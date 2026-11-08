@@ -240,4 +240,3 @@ Suite 延迟交替运行 24 轮，每轮每张卡预热 200 ms，测试两个发
 RTT 测量期间，A100 有效 SM 时钟约 1410 MHz，RTX 中位数约 1874 MHz（1830–1905 MHz）。RTT 中位数差约 0.727 µs，空系统屏障差约 0.693 µs，远端读仅差约 0.063 µs，支持 GPU 侧同步及频率差异为主要贡献者。但尚未独立控制架构和映射模式，不能据此确定纯链路延迟；各项开销会重叠，不能简单相加。仅发出写入的时间接近计时开销，不表示数据已经到达对端。
 
 [硬件测试说明](https://github.com/ir1ka/nvidia-open-suite/blob/main/tests/hardware/README.md) 提供编译与复现方法。`tests/hardware/` 下的自有测试程序和分析脚本**仅保存在 Git/源码中，DKMS deb 和 tools deb 均不包含**。CUDA Samples 源码、二进制及原始实验日志不进入仓库或软件包；安装和常规源码测试不会自动运行 GPU 测试。
-
