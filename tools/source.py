@@ -80,14 +80,14 @@ def fetch_original(archive,work):
     v=base.VENDOR
     if archive is None:
         archive=work/'nvidia-official-source.tar.gz';partial=work/'nvidia-official-source.download'
-        print('Downloading SHA256-pinned NVIDIA source: '+v['url'],flush=True)
+        print('Downloading official NVIDIA source: '+v['url'],flush=True)
         with urllib.request.urlopen(v['url'],timeout=60)as response,partial.open('xb')as out:shutil.copyfileobj(response,out)
-        if digest(partial)!=v['sha256']:raise ValueError('Official download SHA256 mismatch')
         partial.rename(archive)
-    if digest(archive)!=v['sha256']:raise ValueError('Official source archive SHA256 mismatch')
     target=work/'official';target.mkdir()
     with tarfile.open(archive)as tar:tar.extractall(target,filter='data')
-    return target/('open-gpu-kernel-modules-'+DRIVER)
+    original=target/('open-gpu-kernel-modules-'+DRIVER)
+    if not complete(original) or base.source_version(original)!=DRIVER:raise ValueError('Archive must contain complete source for the supported driver version')
+    return original
 
 def acquire(plan,work,source=None,archive=None):
     # Never implicitly reuse installed or retained driver trees. The pinned
@@ -118,18 +118,14 @@ def prepare(plan,work,source=None,archive=None):
     for key,path in checks.items():
         if digest(path)!=META[key]:raise ValueError('Suite input hash mismatch: '+key)
     original,origin=acquire(plan,work,source,archive)
-    cmp_present=all((original/name).is_file()and digest(original/name)==expected for name,expected in META['cmp_expected_sha256'].items())
-    if not cmp_present and '_kgspSec2PostblTimingEnabled' in (original/'src/nvidia/src/kernel/gpu/gsp/kernel_gsp.c').read_text():
-        raise ValueError('Existing CMP modifications are not the complete pinned canonical set; provide reviewed original source or an explicit official archive')
     import cmp_prepare
     cmp_prepare.verify(ROOT)
     chain=[BAR1/'patches/full-bar1-p2p.patch',ROOT/'patches/integration.patch',BAR1/'patches/dynamic-bar1-p2p.patch']
     path=base.prepare_local(original,work/'patched-source',patch_paths=chain,finalize=finalize,
-        metadata_name='nvidia-suite-source.json',prepare_hook=lambda stage:cmp_prepare.prepare(stage,canonical=cmp_present,root=ROOT))
+        metadata_name='nvidia-suite-source.json',prepare_hook=lambda stage:cmp_prepare.prepare(stage,root=ROOT))
     meta=json.loads((path/'nvidia-suite-source.json').read_text())
     if base.source_version(path)!=DRIVER:raise ValueError('Copied source version changed during preparation')
-    if cmp_present and any(meta['original_files'].get(name)!=expected for name,expected in META['cmp_expected_sha256'].items()):raise ValueError('CMP source changed during preparation')
-    meta.update(source_origin=origin,detected_install=plan,cmp_patch_state='canonical-already-present'if cmp_present else'upstream-build-script')
+    meta.update(source_origin=origin,detected_install=plan,cmp_patch_state='upstream-build-script')
     (path/'nvidia-suite-source.json').write_text(json.dumps(meta,indent=2)+'\n')
     base.run([sys.executable,ROOT/'tests/check_cmp.py','--source',path])
     return path

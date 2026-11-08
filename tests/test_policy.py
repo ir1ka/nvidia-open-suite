@@ -1,4 +1,4 @@
-import importlib.machinery,importlib.util,json,shlex,subprocess,sys,tempfile,unittest
+import tarfile,io,importlib.machinery,importlib.util,json,shlex,subprocess,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
@@ -49,10 +49,9 @@ class Detection(unittest.TestCase):
  def test_binary_only_is_not_complete(self):
   p=self.root/'binary';p.mkdir();(p/'nv-kernel.o_binary').write_bytes(b'ELF')
   self.assertFalse(source.complete(p))
- def test_bad_archive_rejected_without_extract(self):
+ def test_invalid_tar_archive_is_rejected(self):
   archive=self.root/'bad.tar.gz';archive.write_bytes(b'bad')
-  with self.assertRaisesRegex(ValueError,'SHA256'):source.fetch_original(archive,self.root)
-  self.assertFalse((self.root/'official').exists())
+  with self.assertRaises(tarfile.ReadError):source.fetch_original(archive,self.root)
  def test_pinned_patch_integrity(self):
   for name in source.META['patch_order']:self.assertEqual(source.digest(ROOT/'vendor/cmpunlocker/driver/patches'/name),source.META['patches'][name]['sha256'])
   self.assertEqual(len(source.META['patch_order']),14)
@@ -142,3 +141,13 @@ class CentralDriverMetadata(unittest.TestCase):
    self.assertIn('PACKAGE_VERSION="9.0+nvidia.999.12.34"',(stage/'dkms.conf').read_text())
    self.assertIn('999.12.34',(stage/'check-modules.sh').read_text())
    self.assertNotIn('@DRIVER_VERSION@',(stage/'check-modules.sh').read_text())
+
+class ModifiedArchives(unittest.TestCase):
+ def test_modified_archive_is_accepted_without_pristine_checksum(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);archive=root/'external.tar.gz'
+   with tarfile.open(archive,'w:gz') as tar:
+    for name,text in [('version.mk','NVIDIA_VERSION = '+source.DRIVER+'\n'),('full.c','/* external driver modification */\n')]:
+     data=text.encode();info=tarfile.TarInfo('open-gpu-kernel-modules-'+source.DRIVER+'/'+name);info.size=len(data);tar.addfile(info,io.BytesIO(data))
+   with patch.object(source,'REQUIRED',['version.mk','full.c']):result=source.fetch_original(archive,root)
+   self.assertIn('external driver modification',(result/'full.c').read_text())

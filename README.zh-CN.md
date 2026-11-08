@@ -14,7 +14,7 @@
 | --- | --- | --- | --- |
 | 610.43.02 | 2.1.0 | 支持；RTX 30/40 动态小 BAR1 仍为预览 | 仅 Debian 13 |
 
-`supported-drivers.json` 是驱动配置的唯一来源，统一维护版本键、默认选择、归档校验值及时间戳和默认发行版修订号。准备阶段据此生成 DKMS 配置及模块检查脚本，CMP 适配器和打包器共享相同元数据。`manifest.json` 仅保留 Suite 与补丁完整性信息，不再重复定义 NVIDIA 版本；第三方上游文件保持原样。
+`supported-drivers.json` 是驱动配置的唯一来源，统一维护版本键、默认选择、源码时间戳和默认发行版修订号。准备阶段据此生成 DKMS 配置及模块检查脚本，CMP 适配器和打包器共享相同元数据。`manifest.json` 仅保留 Suite 与补丁完整性信息，不再重复定义 NVIDIA 版本；第三方上游文件保持原样。
 
 其他版本直接拒绝。新增版本需要适配并验证源码及补丁配置，不能仅添加版本号。DKMS 对内核更新的自动构建不代表支持新的 NVIDIA 驱动版本。
 
@@ -55,9 +55,11 @@ sudo apt install /var/tmp/nvidia-suite-build-01/packages/nvidia-open-suite-dkms_
 
 ### 驱动源码获取
 
-Suite Git 仓库和发行源码归档仅包含集成代码、补丁和固定版本的 cmpunlocker 依赖，**不内置 NVIDIA open 驱动源码树**。构建的 `prepare` 阶段从 NVIDIA 官方 GitHub 下载对应受支持版本的 release tag 源码归档，并按 `supported-drivers.json` 中的固定 SHA256 校验，随后解压和打补丁。不再自动复用 `/usr/src/nvidia-*`；已安装驱动的检测仅用于选择版本和包元数据。
+Suite Git 仓库和发行源码归档仅包含集成代码、补丁和固定版本的 cmpunlocker 依赖，**不内置 NVIDIA open 驱动源码树**。构建的 `prepare` 阶段从 NVIDIA 官方 GitHub 下载对应受支持版本的 release tag 源码归档，随后解压和打补丁，不再要求固定的源码归档 SHA256。不再自动复用 `/usr/src/nvidia-*`；已安装驱动的检测仅用于选择版本和包元数据。
 
-离线构建可指定 `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`，仍须通过相同 SHA256 校验。开发者可显式使用 `--source /path/to/source` 提供完整、版本匹配且未打过 Suite 补丁的源码；它与 `--archive` 互斥，绕过归档来源校验，不是默认发布构建路径。
+离线或外部修改过的源码归档可通过 `--archive /path/to/source.tar.gz` 提供，不要求与原始归档 SHA256 相同。归档顶层目录仍须为 `open-gpu-kernel-modules-<版本>`。也可使用 `--source /path/to/source` 提供完整且版本受支持的本地源码；两种选项互斥。
+
+不再把 NVIDIA 原文件或执行 CMP 补丁后的文件与固定 SHA256 比较；CMP 上游文件哈希仅记录来源，不作为准入条件。仍保留版本白名单、源码完整性、安全解压、补丁应用和源码功能检查。已有补丁若冲突或重复应用，会明确报错，不再根据文件哈希自动跳过。Suite 补丁完整性及构建快照检查保留：哈希用于标识用户提供的源码，并检测准备过程中或验证后的变动，不要求源码等同于原始上游文件。
 
 生成的 **DKMS deb 必须包含下载后打好补丁的驱动源码**，供目标系统安装和内核更新时离线编译；这些阶段无需再次下载。可选 tools 包仅包含准备工具和补丁，不包含下载的驱动源码树。项目源码分发与可安装的 DKMS 驱动包属于不同层次。
 
@@ -181,7 +183,7 @@ DKMS 更新内核后自动尝试重编译；缺少 headers、接口不兼容或�
 ## 第三方依赖与署名
 
 - 必需上游：[amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker)，固定提交 `2c7e2ecd7944e791fec040d2680036beb4a9327b`，GPL v2，位于 `vendor/cmpunlocker`。使用上游准备脚本、14 项补丁、常量和 Gen2 行为；仅在工作副本加入 prepare-only 适配，再叠加 Suite 补丁。不执行其安装器、GRUB 或 passthrough 部署。不需要另装 cmpunlocker deb。原始 LICENSE 和 CREDITS 保留。
-- 驱动源码：[NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules)，610.43.02。发行版本及归档 SHA256 在 `supported-drivers.json`，官方 GitHub URL 根据版本号生成；许可证在 `licenses/NVIDIA-COPYING`，保留各文件原始署名。
+- 驱动源码：[NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules)，610.43.02。发行版本在 `supported-drivers.json`，官方 GitHub URL 根据版本号生成；许可证在 `licenses/NVIDIA-COPYING`，保留各文件原始署名。
 - 动态映射参考：[Duanyll/open-gpu-kernel-modules](https://github.com/Duanyll/open-gpu-kernel-modules/tree/8edb5f6c36f39a45cb6df0b8ac19bd42ece80235)，参考 allocation-relative encoder/call-site 方法，窗口管理及守卫由 Suite 重写；不是运行依赖。上游 COPYING 保留 NVIDIA MIT/GPLv2 说明。
 
 本项目并非 NVIDIA 或 cmpunlocker 官方发行。Suite 自有集成代码采用 GPL v2；上游代码保留其原始许可证。上游依赖自身附带的文件保留原样，供校验和重现，不代表本项目的开发历史。

@@ -23,8 +23,6 @@ def profile(version=None, root=ROOT):
     if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)+', version):
         raise ValueError('Invalid NVIDIA version')
     vendor = dict(item['source'], driver_version=version)
-    if not re.fullmatch(r'[0-9a-f]{64}', vendor['sha256']):
-        raise ValueError('Invalid source SHA256')
     # Construct the official release URL from the version key, without a second
     # independently maintained version in an archive URL.
     vendor['url'] = 'https://codeload.github.com/NVIDIA/open-gpu-kernel-modules/tar.gz/refs/tags/'+version

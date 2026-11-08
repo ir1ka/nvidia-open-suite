@@ -14,7 +14,7 @@ The machine-readable allowlist is [`supported-drivers.json`](supported-drivers.j
 | --- | --- | --- | --- |
 | 610.43.02 | 2.1.0 | Supported; RTX 30/40 dynamic small BAR1 remains preview | Debian 13 only |
 
-`supported-drivers.json` is the sole driver configuration source: it owns the version key, default selection, archive checksum/timestamp, and default distribution revision. Preparation renders DKMS and module-check templates from it; the CMP adapter and package builder use the same metadata. `manifest.json` retains Suite/patch integrity metadata, not a second NVIDIA version. Third-party upstream files remain unmodified.
+`supported-drivers.json` is the sole driver configuration source: it owns the version key, default selection, source timestamp, and default distribution revision. Preparation renders DKMS and module-check templates from it; the CMP adapter and package builder use the same metadata. `manifest.json` retains Suite/patch integrity metadata, not a second NVIDIA version. Third-party upstream files remain unmodified.
 
 Other NVIDIA versions are rejected. Adding a row requires adapting and validating the source/patch profile, not merely adding a version string. Kernel updates handled by DKMS do not add support for new NVIDIA driver versions.
 
@@ -53,9 +53,11 @@ Replace the example distribution package version with the target system's versio
 
 ### Driver source acquisition
 
-The Suite Git repository and release source archive contain integration code, patches, and the pinned cmpunlocker dependency, **not a bundled NVIDIA open driver source tree**. During `prepare`, the build downloads NVIDIA's official GitHub release-tag source archive for the selected supported version and verifies the pinned SHA256 in `supported-drivers.json` before extraction and patching. A complete installed `/usr/src/nvidia-*` tree is no longer implicitly reused. Installed-driver detection selects the version and provider metadata, not the source contents.
+The Suite Git repository and release source archive contain integration code, patches, and the pinned cmpunlocker dependency, **not a bundled NVIDIA open driver source tree**. During `prepare`, the build downloads NVIDIA's official GitHub release-tag source archive for the selected supported version before extraction and patching, without a pinned archive SHA256 check. A complete installed `/usr/src/nvidia-*` tree is no longer implicitly reused. Installed-driver detection selects the version and provider metadata, not the source contents.
 
-For offline builds, pass `--archive /path/to/nvidia-610.43.02-upstream.tar.gz`; the same pinned SHA256 is mandatory. The explicit development override `--source /path/to/source` accepts a complete, matching, unpatched local tree and is mutually exclusive with `--archive`. It bypasses archive provenance verification and is not the default release build path.
+For offline or externally modified source archives, pass `--archive /path/to/source.tar.gz`; there is no pristine-archive checksum requirement. Archives must retain the `open-gpu-kernel-modules-<version>` top-level directory. Alternatively, use `--source /path/to/source` for a complete local tree matching a supported version. The options are mutually exclusive.
+
+Externally modified NVIDIA source is accepted without comparing original or CMP-patched files against canonical SHA256 values. Upstream CMP file hashes are recorded for provenance rather than enforced. Supported-version, complete-source, safe-extraction, patch-application, and functional source checks remain. Existing conflicting or already-applied patches may fail explicitly; the builder does not silently skip them based on hashes. Suite patch integrity and build-snapshot checks remain: hashes identify the supplied source and detect changes during preparation or after validation, rather than requiring pristine upstream contents.
 
 The generated **DKMS deb necessarily includes the downloaded and patched driver source** so DKMS can compile at installation and after kernel updates without downloading source again. The optional tools package contains preparation tools and patches, not the downloaded driver tree. This distinction applies to project source distribution versus the installable DKMS driver package.
 
@@ -170,7 +172,7 @@ DKMS attempts automatic rebuilds after kernel updates. Missing headers, incompat
 ## Dependencies and attribution
 
 - Required upstream: [amoghmunikote/cmpunlocker](https://github.com/amoghmunikote/cmpunlocker), pinned commit `2c7e2ecd7944e791fec040d2680036beb4a9327b`, GPL v2, in `vendor/cmpunlocker`. Suite uses its preparation script, all 14 patches, constants, and Gen2 behavior, adding prepare-only adaptation in a working copy before Suite patches. Its installer, GRUB modifications, and passthrough deployment are not run. No separate cmpunlocker deb is required. Original LICENSE and CREDITS files are preserved.
-- Driver source: [NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules), 610.43.02. The release version and archive SHA256 are recorded in `supported-drivers.json`; the official GitHub URL is derived from that version; licensing is preserved in `licenses/NVIDIA-COPYING` and individual source files.
+- Driver source: [NVIDIA/open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules), 610.43.02. The release version is recorded in `supported-drivers.json`; the official GitHub URL is derived from that version; licensing is preserved in `licenses/NVIDIA-COPYING` and individual source files.
 - Dynamic mapping reference: [Duanyll/open-gpu-kernel-modules](https://github.com/Duanyll/open-gpu-kernel-modules/tree/8edb5f6c36f39a45cb6df0b8ac19bd42ece80235). Suite references its allocation-relative encoder/call-site approach, with rewritten window management and guards; it is not a runtime dependency. Upstream COPYING retains NVIDIA's MIT/GPLv2 terms.
 
 This is not an official NVIDIA or cmpunlocker distribution. Suite integration code is GPL v2; upstream files retain their original licenses and attribution. Bundled upstream material is retained for verification and reproducibility, not as this project's development history.
