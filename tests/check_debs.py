@@ -19,7 +19,7 @@ with archive(main,'--ctrl-tarfile')as t:
 with archive(main,'--fsys-tarfile')as t:
     files=[m.name for m in t if m.isfile()]
     assert all(p.startswith(('./usr/src/','./usr/share/doc/','./etc/modprobe.d/','./usr/lib/nvidia-open-suite/','./usr/lib/systemd/system/'))for p in files)
-    assert not any('/toolkit/'in p for p in files)
+    assert not any('/toolkit/'in p or '/tests/hardware/'in p for p in files)
     sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
     from gen2_deployment import script
     assert t.extractfile('./usr/lib/nvidia-open-suite/gen2-hammer').read()==script().encode()
@@ -35,6 +35,7 @@ assert 'liblzma5'not in deps and 'libzstd1'not in deps and 'findutils'not in dep
 with archive(tools,'--fsys-tarfile')as t:
     names=t.getnames()
     assert './usr/sbin/nvidia-open-suite'in names
+    assert not any('/tests/hardware/'in p for p in names)
     assert './usr/share/nvidia-open-suite/toolkit/nvidia-open-suite/supported-drivers.json'in names
     assert any('/tests/check_cmp.py'in p for p in names)
     assert not any(p.startswith('./usr/src/')or '/initramfs-tools/hooks/'in p for p in names)
